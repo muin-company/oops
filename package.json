@@ -14,8 +14,19 @@
     "debugging",
     "ai",
     "cli",
-    "developer-tools"
+    "developer-tools",
+    "anthropic",
+    "claude",
+    "troubleshooting",
+    "stacktrace"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/oops-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/oops-cli/issues"
+  },
   "author": "",
   "license": "MIT",
   "dependencies": {
