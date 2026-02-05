@@ -1,0 +1,29 @@
+{
+  "name": "oops-cli",
+  "version": "1.0.0",
+  "description": "Pipe error messages to AI for instant solutions",
+  "main": "index.js",
+  "bin": {
+    "oops": "./bin/oops.js"
+  },
+  "scripts": {
+    "test": "node test.js"
+  },
+  "keywords": [
+    "error",
+    "debugging",
+    "ai",
+    "cli",
+    "developer-tools"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "chalk": "^4.1.2",
+    "commander": "^12.1.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
