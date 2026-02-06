@@ -1190,6 +1190,775 @@ exit 0
 
 ---
 
+## Error Handling Pattern Examples
+
+### Pattern 1: Promise Rejection Handling (Unhandled Rejections)
+
+**Error:**
+```bash
+$ node app.js
+(node:12345) UnhandledPromiseRejectionWarning: Error: Connection timeout
+    at Timeout._onTimeout (/app/db.js:45:12)
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:12345) UnhandledPromiseRejectionWarning: Unhandled promise rejection.
+This error originated either by throwing inside of an async function without
+a catch block, or by rejecting a promise which was not handled with .catch().
+```
+
+**Solution:**
+```bash
+$ node app.js 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: Unhandled Promise Rejection - async function threw without catch
+
+Solution: Add error handling to async operations
+
+Common causes:
+
+1. **Async function without try-catch:**
+   ❌ Bad:
+   async function fetchUser(id) {
+     const user = await db.query('SELECT * FROM users WHERE id = $1', [id])
+     return user  // If query fails, unhandled rejection
+   }
+
+   ✅ Fix:
+   async function fetchUser(id) {
+     try {
+       const user = await db.query('SELECT * FROM users WHERE id = $1', [id])
+       return user
+     } catch (error) {
+       console.error('Failed to fetch user:', error)
+       throw new Error(`User ${id} not found`)
+     }
+   }
+
+2. **Promise without .catch():**
+   ❌ Bad:
+   fetch('/api/users').then(r => r.json()).then(data => console.log(data))
+
+   ✅ Fix:
+   fetch('/api/users')
+     .then(r => r.json())
+     .then(data => console.log(data))
+     .catch(err => console.error('Fetch failed:', err))
+
+3. **Global handler (safety net):**
+   process.on('unhandledRejection', (reason, promise) => {
+     console.error('Unhandled Rejection at:', promise, 'reason:', reason)
+     // Application specific logging, throwing an error, etc.
+   })
+
+4. **Using async/await at top level (Node 14.8+):**
+   // package.json
+   {
+     "type": "module"
+   }
+   
+   // Top-level await
+   try {
+     const data = await fetchData()
+   } catch (err) {
+     console.error(err)
+   }
+
+💡 Enable strict rejection handling:
+   node --unhandled-rejections=strict app.js
+
+Done in 1.2s ✓
+```
+
+---
+
+### Pattern 2: Try-Catch Anti-Patterns
+
+**Error:**
+```bash
+$ npm test
+TypeError: Cannot read property 'length' of undefined
+    at calculateTotal (utils.js:23:15)
+```
+
+**Solution:**
+```bash
+$ npm test 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: Cannot read property of undefined - missing null check
+
+Solution: Defensive programming and better error handling
+
+Anti-patterns to avoid:
+
+1. **Empty catch blocks (swallowing errors):**
+   ❌ Bad:
+   try {
+     const data = JSON.parse(input)
+   } catch (e) {
+     // Silent failure - impossible to debug
+   }
+
+   ✅ Fix:
+   try {
+     const data = JSON.parse(input)
+   } catch (e) {
+     console.error('Failed to parse JSON:', e.message)
+     return null  // Or throw with context
+   }
+
+2. **Catching without rethrowing:**
+   ❌ Bad:
+   try {
+     await criticalOperation()
+   } catch (error) {
+     console.log('Oops')  // Logged but not handled
+   }
+   // Execution continues as if nothing happened!
+
+   ✅ Fix:
+   try {
+     await criticalOperation()
+   } catch (error) {
+     console.error('Critical operation failed:', error)
+     throw error  // Propagate to caller
+   }
+
+3. **Catching Error instead of specific types:**
+   ❌ Bad:
+   try {
+     const data = await fetch(url)
+   } catch (error) {
+     // Catches syntax errors, network errors, everything
+   }
+
+   ✅ Fix:
+   try {
+     const response = await fetch(url)
+     if (!response.ok) {
+       throw new NetworkError(`HTTP ${response.status}`)
+     }
+     return await response.json()
+   } catch (error) {
+     if (error instanceof NetworkError) {
+       // Handle network issues
+     } else if (error instanceof SyntaxError) {
+       // Handle JSON parse errors
+     } else {
+       throw error  // Unknown error
+     }
+   }
+
+4. **Not validating inputs before use:**
+   ❌ Bad:
+   function calculateTotal(items) {
+     return items.reduce((sum, item) => sum + item.price, 0)
+     // Crashes if items is undefined/null
+   }
+
+   ✅ Fix:
+   function calculateTotal(items) {
+     if (!items || !Array.isArray(items)) {
+       throw new TypeError('items must be an array')
+     }
+     return items.reduce((sum, item) => sum + item.price, 0)
+   }
+
+   Or with optional chaining:
+   function calculateTotal(items) {
+     return items?.reduce((sum, item) => sum + (item?.price ?? 0), 0) ?? 0
+   }
+
+💡 Use ESLint rule: no-empty (warns about empty catch blocks)
+
+Done in 1.4s ✓
+```
+
+---
+
+### Pattern 3: Async Error Propagation
+
+**Error:**
+```bash
+$ node server.js
+Error [ERR_HTTP_HEADERS_SENT]: Cannot set headers after they are sent
+    at ServerResponse.setHeader (_http_outgoing.js:561:11)
+    at ServerResponse.header (express/lib/response.js:767:10)
+```
+
+**Solution:**
+```bash
+$ node server.js 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: Headers already sent - response sent twice
+
+Solution: Proper async/await error handling in Express
+
+Common mistake:
+   ❌ Bad:
+   app.get('/users/:id', async (req, res) => {
+     try {
+       const user = await User.findById(req.params.id)
+       res.json(user)
+     } catch (error) {
+       res.status(500).json({ error: error.message })
+     }
+     
+     // Implicit return allows execution to continue
+     console.log('Request processed')
+   })
+
+This can cause:
+   1. Try block succeeds → sends response
+   2. Exception happens in console.log → catch runs
+   3. Catch tries to send response → headers already sent!
+
+✅ Fix with early returns:
+   app.get('/users/:id', async (req, res) => {
+     try {
+       const user = await User.findById(req.params.id)
+       if (!user) {
+         return res.status(404).json({ error: 'User not found' })
+       }
+       return res.json(user)
+     } catch (error) {
+       console.error('Error fetching user:', error)
+       return res.status(500).json({ error: 'Internal server error' })
+     }
+   })
+
+✅ Or use async error handler middleware:
+   // middleware/asyncHandler.js
+   const asyncHandler = (fn) => (req, res, next) => {
+     Promise.resolve(fn(req, res, next)).catch(next)
+   }
+   
+   // Use it:
+   app.get('/users/:id', asyncHandler(async (req, res) => {
+     const user = await User.findById(req.params.id)
+     if (!user) {
+       throw new NotFoundError('User not found')
+     }
+     res.json(user)
+   }))
+   
+   // Global error handler
+   app.use((err, req, res, next) => {
+     if (err instanceof NotFoundError) {
+       return res.status(404).json({ error: err.message })
+     }
+     console.error(err)
+     res.status(500).json({ error: 'Internal server error' })
+   })
+
+💡 Never send response twice in the same handler
+💡 Always return after res.json() / res.send()
+
+Done in 1.3s ✓
+```
+
+---
+
+### Pattern 4: Event Emitter Error Handling
+
+**Error:**
+```bash
+$ node app.js
+events.js:377
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: connect ECONNREFUSED 127.0.0.1:5432
+Emitted 'error' event on Socket instance at:
+    at Socket.<anonymous> (net.js:1266:12)
+```
+
+**Solution:**
+```bash
+$ node app.js 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: Unhandled 'error' event on EventEmitter
+
+Solution: Always listen for 'error' events
+
+EventEmitters crash the process if 'error' event is emitted with no listeners!
+
+Common sources:
+   1. **Database connections:**
+      ❌ Bad:
+      const client = new Client({ /* config */ })
+      client.connect()  // No error listener!
+
+      ✅ Fix:
+      const client = new Client({ /* config */ })
+      client.on('error', (err) => {
+        console.error('Database error:', err)
+        // Attempt reconnection or graceful shutdown
+      })
+      client.connect()
+
+   2. **HTTP requests:**
+      ❌ Bad:
+      const req = http.request(options, (res) => { /* handle */ })
+      req.end()  // No error listener!
+
+      ✅ Fix:
+      const req = http.request(options, (res) => { /* handle */ })
+      req.on('error', (err) => {
+        console.error('Request failed:', err)
+      })
+      req.end()
+
+   3. **Streams:**
+      ❌ Bad:
+      const stream = fs.createReadStream('file.txt')
+      stream.pipe(destination)  // No error listeners!
+
+      ✅ Fix:
+      const stream = fs.createReadStream('file.txt')
+      stream.on('error', (err) => {
+        console.error('Stream error:', err)
+      })
+      destination.on('error', (err) => {
+        console.error('Destination error:', err)
+      })
+      stream.pipe(destination)
+
+   4. **WebSocket connections:**
+      const ws = new WebSocket('ws://localhost:8080')
+      
+      ws.on('error', (err) => {
+        console.error('WebSocket error:', err)
+        // Attempt reconnection
+      })
+      
+      ws.on('close', () => {
+        console.log('Connection closed, reconnecting...')
+        setTimeout(connect, 5000)
+      })
+
+💡 Pattern: Add error listener immediately after creating EventEmitter
+💡 Use pipeline() for streams (handles errors automatically in Node 15+)
+
+   import { pipeline } from 'stream/promises'
+   await pipeline(source, transform, destination)
+
+Done in 1.1s ✓
+```
+
+---
+
+### Pattern 5: Callback Error Handling (Legacy Code)
+
+**Error:**
+```bash
+$ node legacy.js
+TypeError: callback is not a function
+    at readFileCallback (legacy.js:12:5)
+```
+
+**Solution:**
+```bash
+$ node legacy.js 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: Callback error handling anti-patterns in legacy code
+
+Solution: Proper Node.js callback conventions
+
+Node.js callback pattern: (err, result) => { }
+
+Common mistakes:
+
+1. **Wrong argument order:**
+   ❌ Bad:
+   fs.readFile('file.txt', (data, err) => {  // Wrong order!
+     if (err) throw err
+     console.log(data)
+   })
+
+   ✅ Fix:
+   fs.readFile('file.txt', 'utf8', (err, data) => {
+     if (err) {
+       console.error('Read failed:', err)
+       return
+     }
+     console.log(data)
+   })
+
+2. **Not checking for errors:**
+   ❌ Bad:
+   db.query('SELECT * FROM users', (err, results) => {
+     console.log(results[0].name)  // Crashes if err is set
+   })
+
+   ✅ Fix:
+   db.query('SELECT * FROM users', (err, results) => {
+     if (err) {
+       console.error('Query failed:', err)
+       return
+     }
+     if (!results || results.length === 0) {
+       console.log('No users found')
+       return
+     }
+     console.log(results[0].name)
+   })
+
+3. **Callback hell (nested callbacks):**
+   ❌ Bad:
+   fs.readFile('config.json', (err, data) => {
+     if (err) throw err
+     db.connect(data, (err, connection) => {
+       if (err) throw err
+       connection.query('SELECT *', (err, results) => {
+         if (err) throw err
+         // 😱 Callback hell
+       })
+     })
+   })
+
+   ✅ Fix with Promises:
+   const { promisify } = require('util')
+   const readFile = promisify(fs.readFile)
+   
+   async function init() {
+     try {
+       const data = await readFile('config.json', 'utf8')
+       const connection = await db.connect(data)
+       const results = await connection.query('SELECT *')
+       return results
+     } catch (err) {
+       console.error('Init failed:', err)
+       throw err
+     }
+   }
+
+4. **Calling callback multiple times:**
+   ❌ Bad:
+   function processFile(path, callback) {
+     fs.readFile(path, (err, data) => {
+       if (err) {
+         callback(err)  // Called once
+         return
+       }
+       
+       try {
+         const result = JSON.parse(data)
+         callback(null, result)  // May be called again if parse fails!
+       } catch (parseErr) {
+         callback(parseErr)
+       }
+     })
+   }
+
+   ✅ Fix:
+   function processFile(path, callback) {
+     let called = false
+     
+     const done = (err, result) => {
+       if (called) return
+       called = true
+       callback(err, result)
+     }
+     
+     fs.readFile(path, 'utf8', (err, data) => {
+       if (err) return done(err)
+       
+       try {
+         const result = JSON.parse(data)
+         done(null, result)
+       } catch (parseErr) {
+         done(parseErr)
+       }
+     })
+   }
+
+💡 Modern alternative: Convert to Promises with util.promisify
+💡 Or use fs.promises API (Node 10+)
+
+   import { readFile } from 'fs/promises'
+   const data = await readFile('file.txt', 'utf8')
+
+Done in 1.5s ✓
+```
+
+---
+
+### Pattern 6: Error Context and Stack Traces
+
+**Error:**
+```bash
+$ npm run import
+Error: Import failed
+    at Object.<anonymous> (/app/importer.js:145:11)
+```
+
+**Solution:**
+```bash
+$ npm run import 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: Generic error message with no context
+
+Solution: Throw errors with rich context information
+
+Poor error messages slow down debugging. Add context!
+
+1. **Generic errors:**
+   ❌ Bad:
+   throw new Error('Failed')
+
+   ✅ Fix:
+   throw new Error(`Failed to import user ${userId} from file ${filename}: ${originalError.message}`)
+
+2. **Losing stack traces:**
+   ❌ Bad:
+   try {
+     await dangerousOperation()
+   } catch (err) {
+     throw new Error('Operation failed')  // Original stack trace lost!
+   }
+
+   ✅ Fix (wrap with cause):
+   try {
+     await dangerousOperation()
+   } catch (err) {
+     throw new Error('Operation failed', { cause: err })
+   }
+   
+   // Or preserve stack:
+   catch (err) {
+     const newError = new Error(`Operation failed: ${err.message}`)
+     newError.stack = err.stack
+     newError.originalError = err
+     throw newError
+   }
+
+3. **Custom error classes:**
+   ✅ Create meaningful error types:
+   
+   class DatabaseError extends Error {
+     constructor(message, query, params) {
+       super(message)
+       this.name = 'DatabaseError'
+       this.query = query
+       this.params = params
+       this.timestamp = new Date()
+     }
+   }
+   
+   class ValidationError extends Error {
+     constructor(field, value, constraint) {
+       super(`Validation failed for ${field}`)
+       this.name = 'ValidationError'
+       this.field = field
+       this.value = value
+       this.constraint = constraint
+     }
+   }
+   
+   // Usage:
+   if (!email.includes('@')) {
+     throw new ValidationError('email', email, 'must contain @')
+   }
+
+4. **Structured error logging:**
+   ✅ Include useful metadata:
+   
+   function logError(error, context = {}) {
+     console.error({
+       message: error.message,
+       stack: error.stack,
+       name: error.name,
+       timestamp: new Date().toISOString(),
+       ...context,
+       // Add application-specific context
+       userId: context.userId,
+       requestId: context.requestId,
+       environment: process.env.NODE_ENV
+     })
+   }
+   
+   // Usage:
+   try {
+     await processPayment(orderId)
+   } catch (err) {
+     logError(err, {
+       operation: 'processPayment',
+       orderId,
+       userId: req.user.id,
+       requestId: req.id
+     })
+     throw err
+   }
+
+💡 Use Error.captureStackTrace() to customize stack traces
+💡 Consider using a library like pino or winston for structured logging
+
+Done in 1.6s ✓
+```
+
+---
+
+### Pattern 7: Timeout and Resource Cleanup
+
+**Error:**
+```bash
+$ node worker.js
+MaxListenersExceededWarning: Possible EventEmitter memory leak detected.
+11 error listeners added. Use emitter.setMaxListeners() to increase limit
+```
+
+**Solution:**
+```bash
+$ node worker.js 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: Memory leak from uncleaned event listeners or timeouts
+
+Solution: Proper cleanup and timeout handling
+
+Common leak sources:
+
+1. **Forgotten setTimeout/setInterval:**
+   ❌ Bad:
+   function startPolling() {
+     setInterval(async () => {
+       await checkForUpdates()
+     }, 5000)
+     // Never cleared, even if component unmounted!
+   }
+
+   ✅ Fix:
+   let pollingInterval = null
+   
+   function startPolling() {
+     pollingInterval = setInterval(async () => {
+       try {
+         await checkForUpdates()
+       } catch (err) {
+         console.error('Polling failed:', err)
+         stopPolling()
+       }
+     }, 5000)
+   }
+   
+   function stopPolling() {
+     if (pollingInterval) {
+       clearInterval(pollingInterval)
+       pollingInterval = null
+     }
+   }
+   
+   // Clean up on exit
+   process.on('SIGTERM', stopPolling)
+
+2. **Timeout with Promise race:**
+   ✅ Proper timeout pattern:
+   
+   function withTimeout(promise, timeoutMs) {
+     let timeoutId
+     
+     const timeout = new Promise((_, reject) => {
+       timeoutId = setTimeout(() => {
+         reject(new Error(`Operation timed out after ${timeoutMs}ms`))
+       }, timeoutMs)
+     })
+     
+     return Promise.race([promise, timeout])
+       .finally(() => clearTimeout(timeoutId))
+   }
+   
+   // Usage:
+   try {
+     const result = await withTimeout(
+       fetch('https://slow-api.com/data'),
+       5000
+     )
+   } catch (err) {
+     if (err.message.includes('timed out')) {
+       console.error('Request took too long')
+     }
+   }
+
+3. **Database connection cleanup:**
+   ✅ Use try-finally:
+   
+   let client
+   try {
+     client = await pool.connect()
+     const result = await client.query('SELECT * FROM users')
+     return result.rows
+   } catch (err) {
+     console.error('Query error:', err)
+     throw err
+   } finally {
+     if (client) {
+       client.release()  // Always release connection
+     }
+   }
+
+4. **AbortController for cancellable operations:**
+   ✅ Modern approach:
+   
+   const controller = new AbortController()
+   const timeoutId = setTimeout(() => controller.abort(), 5000)
+   
+   try {
+     const response = await fetch(url, {
+       signal: controller.signal
+     })
+     const data = await response.json()
+     return data
+   } catch (err) {
+     if (err.name === 'AbortError') {
+       console.error('Request was aborted (timeout or manual cancel)')
+     }
+     throw err
+   } finally {
+     clearTimeout(timeoutId)
+   }
+
+5. **Event listener cleanup:**
+   ✅ Remove listeners:
+   
+   class DataFetcher extends EventEmitter {
+     constructor() {
+       super()
+       this.active = true
+     }
+     
+     async start() {
+       const handler = (data) => this.emit('data', data)
+       stream.on('data', handler)
+       
+       // Clean up when done
+       this.once('stop', () => {
+         stream.off('data', handler)
+         this.active = false
+       })
+     }
+   }
+
+💡 Use AbortController for modern cancellation
+💡 Always pair setUp with tearDown logic
+💡 Test cleanup in your unit tests!
+
+Done in 1.8s ✓
+```
+
+---
+
 ## Advanced Usage Patterns
 
 ### Error Severity Filtering (Focus on Critical Issues)
