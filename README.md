@@ -87,34 +87,52 @@ The `2>&1` redirects stderr to stdout so `oops` catches all error messages.
 
 ## Examples
 
-### JavaScript/Node.js
+### Example 1: Missing Node.js Dependency
 
+**Error:**
 ```bash
-$ npm install 2>&1 | oops
+$ npm run start
+Error: Cannot find module 'express'
+    at Function.Module._resolveFilename (internal/modules/cjs/loader.js:880:15)
+    at Function.Module._load (internal/modules/cjs/loader.js:725:27)
+    ...
 ```
 
-Output:
-```
-[javascript]
+**Solution:**
+```bash
+$ npm run start 2>&1 | oops
 
-Problem: Module not found - 'express' is not installed
+🔍 Analyzing error...
+
+Problem: Cannot find module 'express'
 
 Solution: Install the missing dependency
 
   $ npm install express
 
 Detected from: package.json references express but it's not in node_modules
+
+Done in 0.8s ✓
 ```
 
-### Python
+---
 
+### Example 2: Python Import Error with Virtual Environment
+
+**Error:**
+```bash
+$ python app.py
+Traceback (most recent call last):
+  File "app.py", line 1, in <module>
+    from flask import Flask
+ModuleNotFoundError: No module named 'flask'
+```
+
+**Solution:**
 ```bash
 $ python app.py 2>&1 | oops
-```
 
-Output:
-```
-[python]
+🔍 Analyzing error...
 
 Problem: ModuleNotFoundError: No module named 'flask'
 
@@ -122,73 +140,187 @@ Solution: Install Flask using pip
 
   $ pip install flask
 
-If using a virtual environment:
+If using a virtual environment (recommended):
   $ source venv/bin/activate
   $ pip install flask
+
+Or add to requirements.txt:
+  flask==3.0.0
+
+Done in 1.1s ✓
 ```
 
-### Go
+---
 
+### Example 3: TypeScript Type Errors
+
+**Error:**
 ```bash
-$ go build 2>&1 | oops
+$ tsc
+src/index.ts:5:7 - error TS2339: Property 'name' does not exist on type '{}'.
+
+5 const user = {};
+  user.name = "John";  // Error here
+  ~~~~
 ```
 
-Output:
-```
-[go]
-
-Problem: undefined: fmt.Printl
-
-Fix: You have a typo - Go's function is fmt.Println (with 'n')
-
-Change:
-  fmt.Printl(x)
-
-To:
-  fmt.Println(x)
-```
-
-### Rust
-
-```bash
-$ cargo build 2>&1 | oops
-```
-
-Output:
-```
-[rust]
-
-Problem: cannot find value `x` in this scope
-
-Solution: Declare the variable before using it
-
-  let x = 42;
-
-Rust requires explicit variable declaration and type inference.
-```
-
-### TypeScript
-
+**Solution:**
 ```bash
 $ tsc 2>&1 | oops
-```
 
-Output:
-```
-[typescript]
+🔍 Analyzing error...
 
 Problem: Property 'name' does not exist on type '{}'
 
-Solution: Define the type or interface
+Solution: Define the type or interface before assignment
 
+Option 1: Use interface
   interface User {
     name: string;
   }
-
   const user: User = { name: "John" };
 
-Or use type annotation:
+Option 2: Type annotation
   const user: { name: string } = { name: "John" };
+
+Option 3: Initialize with properties
+  const user = { name: "John" };  // Type inferred
+
+Done in 0.9s ✓
+```
+
+---
+
+### Example 4: Docker Build Failure (Cryptic Error)
+
+**Error:**
+```bash
+$ docker build -t myapp .
+#5 ERROR: failed to solve with frontend dockerfile.v0: failed to create LLB definition: Dockerfile parse error line 12: unexpected EOF
+```
+
+**Solution:**
+```bash
+$ docker build -t myapp . 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: Dockerfile parse error - unexpected EOF at line 12
+
+Solution: Check Dockerfile line 12 for syntax errors
+
+Common causes:
+  1. Missing backslash (\) at end of multi-line RUN command
+  2. Unclosed quote in COPY or ENV instruction
+  3. Hidden special characters from copy-paste
+
+Debug steps:
+  $ cat -A Dockerfile  # Show hidden characters
+  $ docker build --progress=plain -t myapp .  # Verbose output
+
+Example fix:
+  # Before (missing \)
+  RUN apt-get update
+      apt-get install -y curl
+
+  # After
+  RUN apt-get update && \
+      apt-get install -y curl
+
+Done in 1.2s ✓
+```
+
+---
+
+### Example 5: Git Push Rejected - Merge Conflict
+
+**Error:**
+```bash
+$ git push origin main
+To github.com:user/repo.git
+ ! [rejected]        main -> main (fetch first)
+error: failed to push some refs to 'github.com:user/repo.git'
+hint: Updates were rejected because the remote contains work that you do
+hint: not have locally. This is usually caused by another repository pushing
+hint: to the same ref.
+```
+
+**Solution:**
+```bash
+$ git push origin main 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: Remote contains commits you don't have locally
+
+Solution: Pull changes first, then push
+
+  # Option 1: Merge (preserves all history)
+  $ git pull origin main
+  $ git push origin main
+
+  # Option 2: Rebase (cleaner history)
+  $ git pull --rebase origin main
+  $ git push origin main
+
+  # If you see merge conflicts:
+  1. Fix conflicts in marked files
+  2. git add <resolved-files>
+  3. git commit  (for merge) or git rebase --continue  (for rebase)
+  4. git push origin main
+
+❌ Never: git push --force (destroys teammate's work!)
+
+Done in 1.0s ✓
+```
+
+---
+
+### Example 6: Production Kubernetes Pod CrashLoopBackOff
+
+**Error:**
+```bash
+$ kubectl logs pod/api-7d9f8b-xk2m
+Error: connect ECONNREFUSED 10.0.0.5:5432
+    at TCPConnectWrap.afterConnect [as oncomplete] (net.js:1148:16)
+```
+
+**Solution:**
+```bash
+$ kubectl logs pod/api-7d9f8b-xk2m 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: ECONNREFUSED 10.0.0.5:5432 - Cannot connect to PostgreSQL
+
+Solution: Database connection refused in Kubernetes
+
+Troubleshooting steps:
+
+  1. Check if PostgreSQL service is running:
+     $ kubectl get svc postgres-service
+     $ kubectl get pods -l app=postgres
+
+  2. Verify environment variables in deployment:
+     $ kubectl describe deployment api
+     # Look for DB_HOST, DB_PORT in env section
+
+  3. Check if secret exists:
+     $ kubectl get secret db-creds
+
+  4. Test connection from debug pod:
+     $ kubectl run -it --rm debug --image=postgres:15 --restart=Never -- \
+       psql -h postgres-service -U admin
+
+  5. Check network policies:
+     $ kubectl get networkpolicy
+
+Common fix: Update DB_HOST in deployment.yaml
+  env:
+    - name: DB_HOST
+      value: "postgres-service"  # Not IP address!
+
+Done in 1.4s ✓
 ```
 
 ## How It Works
