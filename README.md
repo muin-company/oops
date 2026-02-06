@@ -758,6 +758,600 @@ If still missing:
   $ pip install -r requirements.txt
 ```
 
+---
+
+## Framework Integration Examples
+
+### React/Next.js Build Error Assistant
+
+```bash
+# Webpack/Next.js build fails
+$ npm run build 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: Module not found: Can't resolve './components/UserCard'
+
+Solution: Import path error - check file location and extension
+
+The file exists but:
+  1. Case sensitivity: UserCard.tsx vs userCard.tsx
+  2. Missing extension in import
+  3. Wrong relative path
+
+Debug steps:
+  $ ls -la src/components/ | grep -i usercard
+  
+Common fixes:
+  // ❌ Bad
+  import UserCard from './components/UserCard'
+  
+  // ✅ Good (Next.js auto-resolves)
+  import UserCard from '@/components/UserCard'
+  
+  // Or use absolute imports in tsconfig.json:
+  {
+    "compilerOptions": {
+      "baseUrl": ".",
+      "paths": {
+        "@/*": ["src/*"]
+      }
+    }
+  }
+
+💡 Enable VS Code auto-import to prevent this:
+   "typescript.preferences.importModuleSpecifier": "non-relative"
+```
+
+---
+
+### Django Migration Conflicts (Team Collaboration)
+
+```bash
+$ python manage.py migrate 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: Conflicting migrations detected
+  app.0023_add_user_field
+  app.0023_add_profile_field
+
+Solution: Two developers created migrations with same number
+
+This happens when:
+  1. You created migration (0023) locally
+  2. Teammate merged their 0023 to main
+  3. You pulled and now have duplicate 0023
+
+Fix:
+  # 1. Reset your migration
+  $ python manage.py migrate app 0022
+  
+  # 2. Delete your 0023 file
+  $ rm app/migrations/0023_add_user_field.py
+  
+  # 3. Re-create migration (will be 0024)
+  $ python manage.py makemigrations
+  
+  # 4. Apply
+  $ python manage.py migrate
+
+Prevention:
+  # Always pull before making migrations
+  $ git pull origin main
+  $ python manage.py makemigrations
+  $ git add migrations/
+  $ git push
+
+Or use merge migration:
+  $ python manage.py makemigrations --merge
+```
+
+---
+
+### Docker Multi-Stage Build Failure
+
+```bash
+$ docker build -t myapp:latest . 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: COPY failed: file not found in build context
+  COPY dist/ /app/dist/
+
+Solution: Build artifacts don't exist when Docker copies them
+
+Common cause: Multi-stage build with missing stage
+
+Your Dockerfile:
+  FROM node:18 AS builder
+  WORKDIR /app
+  COPY package*.json ./
+  RUN npm install
+  COPY . .
+  RUN npm run build
+  
+  FROM nginx:alpine
+  COPY dist/ /usr/share/nginx/html/  # ❌ Copies from wrong stage!
+
+Fix:
+  # Copy from builder stage, not local filesystem
+  COPY --from=builder /app/dist/ /usr/share/nginx/html/
+
+Full working Dockerfile:
+  FROM node:18 AS builder
+  WORKDIR /app
+  COPY package*.json ./
+  RUN npm ci --only=production
+  COPY . .
+  RUN npm run build
+  
+  FROM nginx:alpine
+  COPY --from=builder /app/dist /usr/share/nginx/html
+  COPY nginx.conf /etc/nginx/conf.d/default.conf
+  EXPOSE 80
+  CMD ["nginx", "-g", "daemon off;"]
+
+💡 Debug: Build only first stage
+   $ docker build --target builder -t myapp:debug .
+   $ docker run -it myapp:debug ls -la /app/dist/
+```
+
+---
+
+### Kubernetes CrashLoopBackOff Deep Dive
+
+```bash
+$ kubectl logs pod/api-7d9f8b-xk2m --previous 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: Pod keeps crashing - CrashLoopBackOff
+  Error: connect ECONNREFUSED 10.96.0.15:5432
+
+Solution: App tries to connect to database before it's ready
+
+Root cause: Race condition - app starts faster than database
+
+Fix with init container:
+  # deployment.yaml
+  apiVersion: apps/v1
+  kind: Deployment
+  spec:
+    template:
+      spec:
+        # Wait for postgres before starting app
+        initContainers:
+        - name: wait-for-db
+          image: busybox:1.35
+          command: ['sh', '-c', 'until nc -z postgres-service 5432; do echo waiting for db; sleep 2; done']
+        
+        containers:
+        - name: api
+          image: myapi:latest
+          env:
+          - name: DB_HOST
+            value: postgres-service
+
+Or use readiness/liveness probes:
+  containers:
+  - name: api
+    livenessProbe:
+      httpGet:
+        path: /health
+        port: 3000
+      initialDelaySeconds: 30  # Give app time to connect
+      periodSeconds: 10
+    
+    readinessProbe:
+      httpGet:
+        path: /ready
+        port: 3000
+      initialDelaySeconds: 5
+      periodSeconds: 5
+
+💡 Check all pod events:
+   $ kubectl describe pod api-7d9f8b-xk2m
+   
+💡 Check if service exists:
+   $ kubectl get svc postgres-service -o yaml
+```
+
+---
+
+### TypeScript Type Error Chain Resolution
+
+```bash
+$ tsc --noEmit 2>&1 | oops --verbose
+
+🔍 Analyzing error (verbose mode)...
+
+Problem: Type error cascade - 47 errors from one root cause
+  src/types.ts:12:5 - Property 'userId' is missing
+  src/api.ts:34:12 - Argument not assignable
+  src/components/User.tsx:67:8 - Type mismatch
+  ... (44 more errors)
+
+Solution: Fix root type definition to resolve all
+
+Root cause analysis:
+  // src/types.ts - Missing required field
+  interface User {
+    id: number;
+    name: string;
+    // Missing: userId: string;
+  }
+
+This breaks:
+  1. API calls expecting userId
+  2. Components rendering user data
+  3. Database queries
+  4. Redux reducers
+
+Fix:
+  interface User {
+    id: number;
+    name: string;
+    userId: string;  // Add this
+    email: string;
+    createdAt: Date;
+  }
+
+Then run:
+  $ tsc --noEmit  # Should go from 47 errors → 0
+
+💡 Pro tip: Fix errors from top to bottom
+   Start with type definitions, then API layer, then components
+
+💡 Use TypeScript strict mode to catch these earlier:
+   // tsconfig.json
+   {
+     "compilerOptions": {
+       "strict": true,
+       "noUncheckedIndexedAccess": true,
+       "noImplicitReturns": true
+     }
+   }
+
+Detected: TypeScript 5.3.3
+Timing: Analysis took 1.8s (verbose output)
+```
+
+---
+
+### Terraform Plan Failure (Infrastructure as Code)
+
+```bash
+$ terraform plan 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: Error creating ECS cluster: InvalidParameterException
+  Cluster name "my_api_cluster" is invalid
+
+Solution: AWS resource names can't contain underscores
+
+AWS naming rules:
+  ✅ Letters, numbers, hyphens only
+  ✅ Must start with letter
+  ❌ No underscores, spaces, or special chars
+  ❌ Length limits vary by service
+
+Fix:
+  # terraform/main.tf
+  resource "aws_ecs_cluster" "api" {
+    name = "my-api-cluster"  # Changed _ to -
+  }
+
+Other common Terraform errors:
+
+1. State lock:
+   Error: Error acquiring the state lock
+   Fix: $ terraform force-unlock <lock-id>
+
+2. Provider version:
+   Error: Invalid provider version
+   Fix:
+     terraform {
+       required_providers {
+         aws = {
+           source  = "hashicorp/aws"
+           version = "~> 5.0"  # Pin version
+         }
+       }
+     }
+
+3. Circular dependency:
+   Error: Cycle: aws_security_group.app, aws_instance.web
+   Fix: Remove interdependent references or use data sources
+
+💡 Always run terraform validate before plan:
+   $ terraform init
+   $ terraform validate
+   $ terraform plan
+```
+
+---
+
+## CI/CD Integration
+
+### GitHub Actions Auto-Debug
+
+```yaml
+# .github/workflows/build.yml
+name: Build and Deploy
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build with auto-debug
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          npm run build 2>&1 | tee build.log
+          
+          if [ $? -ne 0 ]; then
+            echo "Build failed, analyzing error..."
+            cat build.log | npx oops-cli > solution.md
+            cat solution.md >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+      
+      - name: Comment solution on PR (if failed)
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const solution = fs.readFileSync('solution.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🔍 Build Failed - Auto-Analysis\n\n${solution}`
+            });
+```
+
+---
+
+### GitLab CI Pipeline Integration
+
+```yaml
+# .gitlab-ci.yml
+stages:
+  - build
+  - test
+
+build:
+  stage: build
+  script:
+    - npm ci
+    - npm run build 2>&1 | tee build.log || BUILD_FAILED=true
+    
+    - |
+      if [ "$BUILD_FAILED" = "true" ]; then
+        echo "Analyzing build failure with AI..."
+        cat build.log | npx oops-cli -v > solution.txt
+        cat solution.txt
+        exit 1
+      fi
+  
+  artifacts:
+    when: on_failure
+    paths:
+      - build.log
+      - solution.txt
+    expire_in: 1 week
+
+test:
+  stage: test
+  script:
+    - npm test 2>&1 | npx oops-cli --severity error || true
+  allow_failure: true
+```
+
+---
+
+### Pre-push Hook (Catch Errors Before CI)
+
+```bash
+#!/bin/bash
+# .git/hooks/pre-push
+
+echo "🧪 Running tests before push..."
+
+npm test 2>&1 | tee test.log
+
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "❌ Tests failed! Analyzing errors..."
+  echo ""
+  cat test.log | npx oops-cli
+  echo ""
+  read -p "Tests failed. Push anyway? (y/N): " -n 1 -r
+  echo
+  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "Push cancelled. Fix tests first."
+    exit 1
+  fi
+fi
+
+echo "✅ Tests passed!"
+exit 0
+```
+
+---
+
+## Advanced Usage Patterns
+
+### Error Severity Filtering (Focus on Critical Issues)
+
+```bash
+# Only show critical errors (crashes, permission denied, OOM)
+$ npm run build 2>&1 | oops --severity critical
+
+# Show all warnings and errors
+$ npm test 2>&1 | oops --severity warning
+
+# Info level (includes hints and suggestions)
+$ npm audit 2>&1 | oops --severity info
+```
+
+---
+
+### Team Error Knowledge Base
+
+Build a searchable error solution database:
+
+```bash
+# Create error KB directory
+mkdir -p .error-kb
+
+# Save common errors with solutions
+$ npm run build 2>&1 | oops --no-color > .error-kb/$(date +%Y%m%d)-build-error.md
+
+# Search previous solutions
+$ grep -r "EADDRINUSE" .error-kb/
+$ grep -r "Module not found" .error-kb/
+
+# Add to git for team sharing
+$ git add .error-kb/
+$ git commit -m "docs: add build error solution to KB"
+```
+
+---
+
+### Integration with Error Monitoring (Sentry, Datadog)
+
+```javascript
+// server.js - Send production errors to AI for analysis
+
+const Sentry = require('@sentry/node');
+const { exec } = require('child_process');
+
+Sentry.init({ dsn: process.env.SENTRY_DSN });
+
+app.use((err, req, res, next) => {
+  // Log to Sentry
+  Sentry.captureException(err);
+  
+  // Also get AI solution
+  const errorLog = `${err.name}: ${err.message}\n${err.stack}`;
+  exec(`echo "${errorLog}" | npx oops-cli`, (error, stdout) => {
+    if (!error) {
+      // Send solution to Slack/Discord
+      notifyTeam({
+        error: err.message,
+        solution: stdout,
+        request: req.path
+      });
+    }
+  });
+  
+  res.status(500).json({ error: 'Internal server error' });
+});
+```
+
+---
+
+### Custom Error Parsers for Domain-Specific Tools
+
+```javascript
+// custom-oops.js - Wrapper for domain-specific error context
+
+const { spawn } = require('child_process');
+
+function analyzeWithContext(errorLog, context) {
+  const enrichedLog = `
+Context: ${context.environment} environment
+Project: ${context.projectName}
+Last Deploy: ${context.lastDeploy}
+Dependencies: ${context.packageVersions}
+
+Error:
+${errorLog}
+  `;
+  
+  const oops = spawn('npx', ['oops-cli', '-v']);
+  oops.stdin.write(enrichedLog);
+  oops.stdin.end();
+  
+  oops.stdout.on('data', (data) => {
+    console.log(data.toString());
+  });
+}
+
+// Usage
+const context = {
+  environment: 'production',
+  projectName: 'ecommerce-api',
+  lastDeploy: '2025-02-06 14:30',
+  packageVersions: require('./package.json').dependencies
+};
+
+process.stdin.on('data', (data) => {
+  analyzeWithContext(data.toString(), context);
+});
+```
+
+---
+
+### Watch Mode for Development (Auto-Analyze on Error)
+
+```bash
+# Monitor logs in real-time, analyze errors automatically
+$ tail -f /var/log/app.log | while read line; do
+    echo "$line"
+    if echo "$line" | grep -q "Error\|Exception\|Fatal"; then
+      echo "$line" | oops
+    fi
+  done
+
+# Or use with nodemon
+$ nodemon --exec 'node app.js 2>&1 | oops' app.js
+```
+
+---
+
+### Multi-Language Project Error Aggregation
+
+```bash
+#!/bin/bash
+# analyze-all-errors.sh
+
+echo "# Project Error Analysis" > error-report.md
+echo "Generated: $(date)" >> error-report.md
+echo "" >> error-report.md
+
+# Frontend errors
+echo "## Frontend (React)" >> error-report.md
+npm --prefix frontend run build 2>&1 | oops --no-color >> error-report.md
+echo "" >> error-report.md
+
+# Backend errors
+echo "## Backend (Python)" >> error-report.md
+cd backend && python -m pytest 2>&1 | oops --no-color >> ../error-report.md
+cd ..
+echo "" >> error-report.md
+
+# Infrastructure errors
+echo "## Infrastructure (Terraform)" >> error-report.md
+cd terraform && terraform validate 2>&1 | oops --no-color >> ../error-report.md
+cd ..
+
+echo "✓ Full project error analysis saved to error-report.md"
+```
+
+---
+
 ## Tips
 
 **Create shell aliases:**
@@ -766,6 +1360,8 @@ If still missing:
 alias oops-npm='npm run build 2>&1 | oops'
 alias oops-py='python 2>&1 | oops'
 alias oops-go='go build 2>&1 | oops'
+alias oops-docker='docker build . 2>&1 | oops'
+alias oops-k8s='kubectl logs 2>&1 | oops'
 ```
 
 **Use with watch mode:**
@@ -778,6 +1374,7 @@ nodemon app.js 2>&1 | oops
 make 2>&1 | oops
 docker build . 2>&1 | oops
 kubectl apply -f deployment.yaml 2>&1 | oops
+terraform plan 2>&1 | oops
 ```
 
 **Save solutions for later:**
@@ -789,6 +1386,25 @@ npm run build 2>&1 | oops > solution.txt
 ```bash
 # Run tests, if they fail, explain them
 npm test 2>&1 || (npm test 2>&1 | oops)
+```
+
+**Integration with ChatOps:**
+```bash
+# Slack/Discord bot command
+/debug <paste error here>
+# Bot internally runs: echo "$error" | oops
+```
+
+**Create project-specific error handling:**
+```bash
+# package.json scripts
+{
+  "scripts": {
+    "build": "webpack build",
+    "build:debug": "npm run build 2>&1 | oops --verbose",
+    "test:debug": "npm test 2>&1 | oops --severity error"
+  }
+}
 ```
 
 ## Development
