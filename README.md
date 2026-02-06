@@ -85,6 +85,39 @@ cargo build 2>&1 | oops
 
 The `2>&1` redirects stderr to stdout so `oops` catches all error messages.
 
+### Options
+
+**`-v, --verbose`**  
+Show detailed analysis including detected language and timing
+
+```bash
+npm test 2>&1 | oops --verbose
+```
+
+**`-s, --severity <level>`**  
+Filter errors by severity level (critical, error, warning, info)
+
+```bash
+# Only analyze critical errors
+npm run build 2>&1 | oops --severity critical
+
+# Only analyze warnings
+npm test 2>&1 | oops -s warning
+```
+
+**Severity Levels:**
+- 🔴 **critical**: Fatal errors, crashes, security issues, permission denials
+- 🟠 **error**: Standard errors and exceptions
+- 🟡 **warning**: Deprecations, timeouts, missing optional items
+- 🔵 **info**: Informational messages, hints, suggestions
+
+**`--no-color`**  
+Disable colored output (useful for CI/CD logs)
+
+```bash
+npm build 2>&1 | oops --no-color
+```
+
 ## Examples
 
 ### Example 1: Missing Node.js Dependency

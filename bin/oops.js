@@ -11,6 +11,7 @@ program
   .description('Pipe error messages to AI for instant solutions')
   .version('1.0.0')
   .option('-v, --verbose', 'Show detailed analysis')
+  .option('-s, --severity <level>', 'Filter by severity level (critical, error, warning, info)')
   .option('--no-color', 'Disable colored output')
   .parse(process.argv);
 
@@ -49,8 +50,27 @@ async function analyzeError(errorText, options) {
   // Detect context
   const context = detectContext(errorText);
   
+  // Check severity filter
+  if (options.severity) {
+    const validLevels = ['critical', 'error', 'warning', 'info'];
+    const requestedLevel = options.severity.toLowerCase();
+    
+    if (!validLevels.includes(requestedLevel)) {
+      console.error(chalk.red(`Invalid severity level: ${options.severity}`));
+      console.error(chalk.gray('Valid levels: critical, error, warning, info'));
+      process.exit(1);
+    }
+    
+    if (context.severity !== requestedLevel) {
+      console.log(chalk.yellow(`Severity mismatch: Detected ${context.severity}, requested ${requestedLevel}`));
+      console.log(chalk.gray('Skipping analysis (use --verbose to see detection details)'));
+      process.exit(0);
+    }
+  }
+  
   if (options.verbose) {
     console.log(chalk.blue('Detected:'), context.language || 'unknown');
+    console.log(chalk.yellow('Severity:'), context.severity);
     console.log(chalk.gray('Analyzing...\n'));
   }
 
