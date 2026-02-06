@@ -356,6 +356,184 @@ Common fix: Update DB_HOST in deployment.yaml
 Done in 1.4s ✓
 ```
 
+---
+
+### Example 7: Webpack/Vite Build Memory Error
+
+**Error:**
+```bash
+$ npm run build
+
+<--- Last few GCs --->
+[23891:0x148008000]   124567 ms: Mark-sweep 2048.2 (2083.3) -> 2047.9 (2083.3) MB, 1829.3 / 0.0 ms  
+allocation failure scavenge might not succeed
+
+FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory
+```
+
+**Solution:**
+```bash
+$ npm run build 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: JavaScript heap out of memory during build
+
+Solution: Increase Node.js memory limit
+
+Quick fix for this build:
+  $ NODE_OPTIONS="--max-old-space-size=4096" npm run build
+
+Permanent fix - add to package.json:
+  "scripts": {
+    "build": "NODE_OPTIONS='--max-old-space-size=4096' vite build"
+  }
+
+Or if using webpack:
+  "scripts": {
+    "build": "node --max-old-space-size=4096 node_modules/webpack/bin/webpack.js"
+  }
+
+Alternative solutions:
+  1. Check for memory leaks in build plugins
+  2. Reduce bundle size (analyze with webpack-bundle-analyzer)
+  3. Split builds into smaller chunks
+  4. Update Node.js to latest LTS (better GC)
+
+Default heap size: ~512MB-2GB depending on platform
+Recommended for large projects: 4096MB (4GB)
+
+Done in 1.3s ✓
+```
+
+---
+
+### Example 8: React/Next.js Hydration Mismatch
+
+**Error:**
+```bash
+$ npm run dev
+
+Warning: Text content did not match. Server: "Loading..." Client: "Welcome, John!"
+Warning: An error occurred during hydration. The server HTML was replaced with client content.
+Error: Hydration failed because the initial UI does not match what was rendered on the server.
+```
+
+**Solution:**
+```bash
+$ npm run dev 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: React hydration mismatch - server and client HTML don't match
+
+Solution: Common causes and fixes
+
+1. **Using browser-only APIs during SSR:**
+   ❌ Bad:
+   const [time, setTime] = useState(Date.now())
+
+   ✅ Fix:
+   const [time, setTime] = useState(null)
+   useEffect(() => setTime(Date.now()), [])
+
+2. **Conditional rendering based on browser state:**
+   ❌ Bad:
+   {window.innerWidth > 768 && <MobileMenu />}
+
+   ✅ Fix:
+   const [isMobile, setIsMobile] = useState(false)
+   useEffect(() => {
+     setIsMobile(window.innerWidth > 768)
+   }, [])
+
+3. **Random values or timestamps in JSX:**
+   ❌ Bad:
+   <div id={Math.random()}>
+
+   ✅ Fix:
+   const [id] = useState(() => Math.random())
+
+4. **Third-party scripts modifying DOM:**
+   Check browser extensions, analytics, or ad blockers
+
+Next.js specific fix:
+  import dynamic from 'next/dynamic'
+  const NoSSR = dynamic(() => import('./Component'), { ssr: false })
+
+Debugging:
+  • Check browser console for the specific mismatch
+  • Add suppressHydrationWarning to the mismatched element (temporary)
+  • Use React DevTools to inspect component tree
+
+Done in 1.5s ✓
+```
+
+---
+
+### Example 9: Rails/Django Migration Conflict
+
+**Error:**
+```bash
+$ rails db:migrate
+
+== 20250206143022 AddUserPreferences: migrating ===============================
+rails aborted!
+StandardError: An error has occurred, this and all later migrations canceled:
+
+PG::DuplicateColumn: ERROR:  column "preferences" of relation "users" already exists
+```
+
+**Solution:**
+```bash
+$ rails db:migrate 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: Migration tries to add column that already exists
+
+Solution: Database is out of sync with migrations
+
+Check migration status:
+  $ rails db:migrate:status
+
+Common scenarios:
+
+1. **Someone ran migrations manually in production:**
+   $ rails db:migrate:status
+   # Find the migration that's "up" but shouldn't be
+   $ rails db:migrate:down VERSION=20250206143022
+   $ rails db:migrate
+
+2. **You pulled code with new migrations:**
+   $ git log db/migrate/
+   # Check if column was added in an earlier migration
+   
+   Fix: Edit the new migration to check if column exists:
+   class AddUserPreferences < ActiveRecord::Migration[7.0]
+     def change
+       unless column_exists?(:users, :preferences)
+         add_column :users, :preferences, :jsonb
+       end
+     end
+   end
+
+3. **You're on a different branch:**
+   $ git branch
+   # Switch to correct branch or merge migrations
+
+4. **Nuclear option (development only!):**
+   $ rails db:drop db:create db:migrate db:seed
+
+Django equivalent:
+  $ python manage.py showmigrations
+  $ python manage.py migrate --fake <app_name> <migration_name>
+
+⚠️  Never run db:drop on production!
+
+Done in 1.2s ✓
+```
+
 ## How It Works
 
 1. **Reads stdin** - Captures error output piped from any command
