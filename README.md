@@ -881,6 +881,907 @@ If still missing:
   $ pip install -r requirements.txt
 ```
 
+---
+
+## Advanced Workflows
+
+### Workflow 1: Production Error Correlation Engine
+
+**Scenario:** Multiple production errors occurring simultaneously across different services. Need to identify root cause by correlating error patterns.
+
+**Challenge:** When a database goes down, you get 100+ different error messages across microservices. Which one is the actual root cause?
+
+**Solution:**
+```bash
+#!/bin/bash
+# error-correlation.sh - Correlate multiple error streams to find root cause
+
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+CORRELATION_DIR="error-correlation-$TIMESTAMP"
+mkdir -p "$CORRELATION_DIR"
+
+echo "🔍 Production Error Correlation Analysis"
+echo "Timestamp: $TIMESTAMP"
+echo "Output: $CORRELATION_DIR/"
+echo ""
+
+# Services to monitor
+SERVICES=(
+  "api-gateway"
+  "auth-service"
+  "payment-service"
+  "notification-service"
+  "database-proxy"
+)
+
+# Collect logs from last 10 minutes
+echo "📥 Step 1: Collecting recent error logs..."
+for service in "${SERVICES[@]}"; do
+  echo "  → $service"
+  kubectl logs "deployment/$service" --since=10m 2>&1 | grep -i "error\|exception\|fatal" > "$CORRELATION_DIR/$service.log"
+done
+
+# Analyze each service's errors
+echo ""
+echo "🤖 Step 2: AI analysis of each service..."
+for service in "${SERVICES[@]}"; do
+  if [ -s "$CORRELATION_DIR/$service.log" ]; then
+    echo "  → Analyzing $service errors..."
+    cat "$CORRELATION_DIR/$service.log" | oops --severity critical --no-color > "$CORRELATION_DIR/$service-analysis.md" 2>&1
+  else
+    echo "  → No errors in $service" > "$CORRELATION_DIR/$service-analysis.md"
+  fi
+done
+
+# Extract error timestamps for correlation
+echo ""
+echo "⏰ Step 3: Building error timeline..."
+{
+  echo "# Error Timeline"
+  echo ""
+  echo "| Time | Service | Error Type | Count |"
+  echo "|------|---------|------------|-------|"
+  
+  for service in "${SERVICES[@]}"; do
+    if [ -s "$CORRELATION_DIR/$service.log" ]; then
+      # Extract timestamp and error type
+      grep -o "[0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}.*Error:\|Exception:" "$CORRELATION_DIR/$service.log" | \
+        awk -v svc="$service" '{print $1, "|", svc, "|", $0}' | \
+        sort | uniq -c | \
+        awk '{printf "| %s | %s | %s | %d |\n", $2, $4, substr($0, index($0,$6)), $1}'
+    fi
+  done
+} > "$CORRELATION_DIR/timeline.md"
+
+# Identify common error patterns
+echo ""
+echo "🔗 Step 4: Finding correlated errors..."
+{
+  echo "# Error Correlation Analysis"
+  echo ""
+  echo "## Common Error Patterns"
+  echo ""
+  
+  # Find errors that appear in multiple services (likely cascading)
+  all_errors=$(cat "$CORRELATION_DIR"/*.log | grep -o "Error: [^$]*" | sort -u)
+  
+  echo "$all_errors" | while read error_pattern; do
+    if [ -z "$error_pattern" ]; then
+      continue
+    fi
+    
+    # Count how many services have this error
+    count=0
+    affected_services=""
+    
+    for service in "${SERVICES[@]}"; do
+      if grep -q "$error_pattern" "$CORRELATION_DIR/$service.log" 2>/dev/null; then
+        count=$((count + 1))
+        affected_services="$affected_services $service"
+      fi
+    done
+    
+    # If error appears in 2+ services, it's correlated
+    if [ $count -ge 2 ]; then
+      echo "### $error_pattern"
+      echo ""
+      echo "**Affected Services ($count):** $affected_services"
+      echo ""
+      
+      # Get AI explanation for this error pattern
+      echo '```' 
+      echo "$error_pattern" | oops --no-color 2>&1 | head -20
+      echo '```'
+      echo ""
+      
+      # This is likely a cascading error or common root cause
+      if [ $count -ge 4 ]; then
+        echo "🚨 **HIGH CORRELATION** - This error appears in $count/${{#SERVICES[@]}} services. Likely root cause!"
+      else
+        echo "⚠️ **MEDIUM CORRELATION** - May be cascading from root cause"
+      fi
+      echo ""
+      echo "---"
+      echo ""
+    fi
+  done
+  
+  echo "## Isolated Errors (Single Service)"
+  echo ""
+  echo "These errors are likely symptoms, not root causes:"
+  echo ""
+  
+  echo "$all_errors" | while read error_pattern; do
+    if [ -z "$error_pattern" ]; then
+      continue
+    fi
+    
+    count=0
+    service_name=""
+    
+    for service in "${SERVICES[@]}"; do
+      if grep -q "$error_pattern" "$CORRELATION_DIR/$service.log" 2>/dev/null; then
+        count=$((count + 1))
+        service_name="$service"
+      fi
+    done
+    
+    if [ $count -eq 1 ]; then
+      echo "- **$service_name**: $error_pattern"
+    fi
+  done
+  
+} > "$CORRELATION_DIR/correlation.md"
+
+# Generate root cause hypothesis
+echo ""
+echo "🎯 Step 5: Root cause hypothesis..."
+{
+  echo "# Root Cause Hypothesis"
+  echo ""
+  echo "Based on error correlation analysis:"
+  echo ""
+  
+  # Find the earliest error in timeline
+  first_error=$(head -2 "$CORRELATION_DIR/timeline.md" | tail -1)
+  
+  echo "## Timeline Analysis"
+  echo ""
+  echo "**First error detected:**"
+  echo "$first_error"
+  echo ""
+  
+  # Find most correlated error
+  most_correlated=$(grep "HIGH CORRELATION" "$CORRELATION_DIR/correlation.md" -B 5 | grep "^### " | head -1)
+  
+  if [ -n "$most_correlated" ]; then
+    echo "## Most Likely Root Cause"
+    echo ""
+    echo "$most_correlated"
+    echo ""
+    echo "This error appears in most services, suggesting it's the root cause rather than a symptom."
+    echo ""
+  fi
+  
+  echo "## Recommended Actions"
+  echo ""
+  echo "1. **Immediate**: Focus investigation on the first service to fail"
+  echo "2. **Priority**: Fix errors with HIGH CORRELATION first"
+  echo "3. **Verify**: Once root cause is fixed, other errors should resolve"
+  echo "4. **Monitor**: Watch for error rate decrease across all services"
+  
+} > "$CORRELATION_DIR/root-cause.md"
+
+# Generate summary report
+{
+  echo "# Production Error Correlation Report"
+  echo ""
+  echo "**Generated:** $(date)"
+  echo "**Time Window:** Last 10 minutes"
+  echo "**Services Analyzed:** ${SERVICES[@]}"
+  echo ""
+  
+  total_errors=$(cat "$CORRELATION_DIR"/*.log 2>/dev/null | wc -l | tr -d ' ')
+  echo "**Total Error Lines:** $total_errors"
+  echo ""
+  
+  echo "## Summary"
+  cat "$CORRELATION_DIR/root-cause.md"
+  echo ""
+  
+  echo "## Full Timeline"
+  cat "$CORRELATION_DIR/timeline.md"
+  echo ""
+  
+  echo "## Detailed Correlation"
+  cat "$CORRELATION_DIR/correlation.md"
+  echo ""
+  
+  echo "## Service-Specific Analysis"
+  for service in "${SERVICES[@]}"; do
+    echo "### $service"
+    echo '```'
+    cat "$CORRELATION_DIR/$service-analysis.md" 2>/dev/null | head -30
+    echo '```'
+    echo ""
+  done
+  
+  echo "---"
+  echo "*Generated by error-correlation.sh with oops*"
+  
+} > "$CORRELATION_DIR/REPORT.md"
+
+echo ""
+echo "✅ Correlation analysis complete!"
+echo ""
+echo "📊 Results:"
+echo "   - Total errors: $(cat "$CORRELATION_DIR"/*.log 2>/dev/null | wc -l | tr -d ' ')"
+echo "   - Services with errors: $(ls "$CORRELATION_DIR"/*.log 2>/dev/null | wc -l | tr -d ' ')"
+echo "   - Correlated patterns: $(grep -c "CORRELATION" "$CORRELATION_DIR/correlation.md" 2>/dev/null || echo "0")"
+echo ""
+echo "📄 Full report: $CORRELATION_DIR/REPORT.md"
+echo "🎯 Root cause: $CORRELATION_DIR/root-cause.md"
+echo ""
+echo "💡 Tip: Share REPORT.md with incident response team"
+```
+
+**Output Example:**
+```
+🔍 Production Error Correlation Analysis
+Timestamp: 20260209-070000
+Output: error-correlation-20260209-070000/
+
+📥 Step 1: Collecting recent error logs...
+  → api-gateway
+  → auth-service
+  → payment-service
+  → notification-service
+  → database-proxy
+
+🤖 Step 2: AI analysis of each service...
+  → Analyzing api-gateway errors...
+  → Analyzing auth-service errors...
+  → No errors in payment-service
+  → Analyzing notification-service errors...
+  → Analyzing database-proxy errors...
+
+⏰ Step 3: Building error timeline...
+
+🔗 Step 4: Finding correlated errors...
+
+🎯 Step 5: Root cause hypothesis...
+
+✅ Correlation analysis complete!
+
+📊 Results:
+   - Total errors: 147
+   - Services with errors: 4
+   - Correlated patterns: 3
+
+📄 Full report: error-correlation-20260209-070000/REPORT.md
+🎯 Root cause: error-correlation-20260209-070000/root-cause.md
+
+💡 Tip: Share REPORT.md with incident response team
+```
+
+**Root Cause Report:**
+```markdown
+# Root Cause Hypothesis
+
+Based on error correlation analysis:
+
+## Timeline Analysis
+
+**First error detected:**
+| 07:00:23 | database-proxy | Error: connection pool exhausted | 1 |
+
+## Most Likely Root Cause
+
+### Error: connection pool exhausted
+
+This error appears in 4/5 services, suggesting it's the root cause rather than a symptom.
+
+## Recommended Actions
+
+1. **Immediate**: Focus investigation on the first service to fail (database-proxy)
+2. **Priority**: Fix errors with HIGH CORRELATION first (connection pool)
+3. **Verify**: Once root cause is fixed, other errors should resolve
+4. **Monitor**: Watch for error rate decrease across all services
+```
+
+**Benefits:**
+- Quickly identify root cause in complex multi-service failures
+- Avoid chasing symptoms instead of root cause
+- AI-powered analysis of each error stream
+- Timeline visualization shows cascade order
+- Automated correlation detection
+
+---
+
+### Workflow 2: Intelligent Error Replay & Testing
+
+**Scenario:** Production error occurred. Need to reproduce it locally, understand it, and create a test case to prevent regression.
+
+**Challenge:** Production errors often can't be reproduced locally due to different data, environment, or timing.
+
+**Solution:**
+```bash
+#!/bin/bash
+# error-replay.sh - Capture, analyze, and create test from production error
+
+if [ $# -lt 1 ]; then
+  echo "Usage: $0 <production-error-log-file>"
+  exit 1
+fi
+
+ERROR_LOG="$1"
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+REPLAY_DIR="error-replay-$TIMESTAMP"
+mkdir -p "$REPLAY_DIR"
+
+echo "🎬 Error Replay & Test Generation"
+echo "Source: $ERROR_LOG"
+echo "Output: $REPLAY_DIR/"
+echo ""
+
+# Step 1: AI analysis of the error
+echo "🤖 Step 1: AI analysis of error..."
+cat "$ERROR_LOG" | oops --verbose > "$REPLAY_DIR/analysis.md"
+
+# Extract key information
+echo ""
+echo "📋 Step 2: Extracting error context..."
+
+{
+  echo "# Error Context"
+  echo ""
+  
+  # Extract stack trace
+  echo "## Stack Trace"
+  echo '```'
+  grep -A 20 "Error:\|Exception:" "$ERROR_LOG" | head -25
+  echo '```'
+  echo ""
+  
+  # Extract environment info
+  echo "## Environment"
+  if grep -q "node" "$ERROR_LOG"; then
+    echo "- Runtime: Node.js $(grep -o "node v[0-9.]*" "$ERROR_LOG" | head -1)"
+  elif grep -q "python" "$ERROR_LOG"; then
+    echo "- Runtime: Python $(grep -o "Python [0-9.]*" "$ERROR_LOG" | head -1)"
+  fi
+  
+  # Extract timestamp
+  timestamp=$(grep -o "[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}" "$ERROR_LOG" | head -1)
+  echo "- Timestamp: $timestamp"
+  echo ""
+  
+  # Extract input/request data if available
+  echo "## Request Data"
+  echo '```'
+  grep -i "request\|input\|payload" "$ERROR_LOG" -A 3 | head -20
+  echo '```'
+  
+} > "$REPLAY_DIR/context.md"
+
+# Step 3: Generate reproduction script
+echo ""
+echo "🔧 Step 3: Generating reproduction script..."
+
+# Detect language/framework
+if grep -q "TypeError\|ReferenceError\|node" "$ERROR_LOG"; then
+  LANG="javascript"
+elif grep -q "Traceback\|python" "$ERROR_LOG"; then
+  LANG="python"
+elif grep -q "panic:\|golang" "$ERROR_LOG"; then
+  LANG="go"
+else
+  LANG="unknown"
+fi
+
+echo "  → Detected language: $LANG"
+
+case $LANG in
+  javascript)
+    {
+      echo "// reproduce-error.js"
+      echo "// Generated from: $ERROR_LOG"
+      echo ""
+      echo "const assert = require('assert');"
+      echo ""
+      echo "// Extract error type and message from log"
+      error_type=$(grep -o "Error: [^$]*" "$ERROR_LOG" | head -1 | cut -d: -f1)
+      error_msg=$(grep -o "Error: [^$]*" "$ERROR_LOG" | head -1 | cut -d: -f2-)
+      
+      echo "/**"
+      echo " * Error from production:"
+      echo " * $error_type:$error_msg"
+      echo " */"
+      echo ""
+      echo "async function reproduceError() {"
+      echo "  // TODO: Set up environment to match production"
+      echo "  // - Database state"
+      echo "  // - Input data"
+      echo "  // - External service mocks"
+      echo ""
+      echo "  try {"
+      echo "    // TODO: Replace with actual code that failed in production"
+      echo "    // Extract from stack trace in $REPLAY_DIR/context.md"
+      echo "    "
+      echo "    // This should throw:"
+      echo "    // $error_type: $error_msg"
+      echo "  } catch (error) {"
+      echo "    console.log('✅ Successfully reproduced error');"
+      echo "    console.log('Error type:', error.constructor.name);"
+      echo "    console.log('Error message:', error.message);"
+      echo "    assert.strictEqual(error.message.includes('$(echo $error_msg | cut -c1-30)'), true);"
+      echo "    return error;"
+      echo "  }"
+      echo ""
+      echo "  throw new Error('❌ Failed to reproduce error - code did not throw');"
+      echo "}"
+      echo ""
+      echo "reproduceError()"
+      echo "  .then(() => console.log('Reproduction successful'))"
+      echo "  .catch(err => {"
+      echo "    console.error('Reproduction failed:', err);"
+      echo "    process.exit(1);"
+      echo "  });"
+    } > "$REPLAY_DIR/reproduce-error.js"
+    ;;
+    
+  python)
+    {
+      echo "# reproduce-error.py"
+      echo "# Generated from: $ERROR_LOG"
+      echo ""
+      echo "import pytest"
+      echo ""
+      error_type=$(grep -o "[A-Za-z]*Error:" "$ERROR_LOG" | head -1 | tr -d ':')
+      error_msg=$(grep -o "Error: [^$]*" "$ERROR_LOG" | head -1)
+      
+      echo '"""'
+      echo "Error from production:"
+      echo "$error_type: $error_msg"
+      echo '"""'
+      echo ""
+      echo "def test_reproduce_production_error():"
+      echo "    '''Reproduce production error to create regression test'''"
+      echo "    # TODO: Set up environment to match production"
+      echo "    "
+      echo "    with pytest.raises($error_type) as exc_info:"
+      echo "        # TODO: Replace with actual code that failed"
+      echo "        # Extract from stack trace in $REPLAY_DIR/context.md"
+      echo "        pass"
+      echo "    "
+      echo "    # Verify error message matches production"
+      echo "    assert '$(echo $error_msg | cut -c1-30)' in str(exc_info.value)"
+      echo ""
+      echo "if __name__ == '__main__':"
+      echo "    test_reproduce_production_error()"
+      echo "    print('✅ Successfully reproduced error')"
+    } > "$REPLAY_DIR/reproduce_error.py"
+    ;;
+esac
+
+# Step 4: Generate regression test template
+echo ""
+echo "🧪 Step 4: Generating regression test..."
+
+{
+  echo "# Regression Test Plan"
+  echo ""
+  echo "## Purpose"
+  echo "Ensure the production error from $(date) does not happen again."
+  echo ""
+  echo "## Steps to Create Test"
+  echo ""
+  echo "1. **Reproduce locally:**"
+  echo "   - Run \`$REPLAY_DIR/reproduce-error.$([[ $LANG == 'javascript' ]] && echo 'js' || echo 'py')\`"
+  echo "   - Confirm error is reproduced exactly"
+  echo ""
+  echo "2. **Identify root cause:**"
+  echo "   - Read AI analysis: \`$REPLAY_DIR/analysis.md\`"
+  echo "   - Debug to find exact cause"
+  echo ""
+  echo "3. **Fix the bug:**"
+  echo "   - Implement fix in source code"
+  echo "   - Run reproduction script → should now pass"
+  echo ""
+  echo "4. **Convert to regression test:**"
+  echo "   - Copy reproduction script to \`tests/regression/\`"
+  echo "   - Add assertions for correct behavior"
+  echo "   - Add to CI pipeline"
+  echo ""
+  echo "5. **Verify fix:**"
+  echo "   - All tests pass (including new regression test)"
+  echo "   - Deploy to staging"
+  echo "   - Monitor for 24h"
+  echo ""
+  echo "## Test Case Template"
+  echo ""
+  echo '```'
+  cat "$REPLAY_DIR/reproduce-error.$([[ $LANG == 'javascript' ]] && echo 'js' || echo 'py')" 2>/dev/null
+  echo '```'
+  echo ""
+  echo "## Acceptance Criteria"
+  echo ""
+  echo "- [ ] Error is reproduced locally with 100% consistency"
+  echo "- [ ] Root cause identified and documented"
+  echo "- [ ] Fix implemented and tested"
+  echo "- [ ] Regression test added to test suite"
+  echo "- [ ] CI passes with new test"
+  echo "- [ ] Production monitoring shows error rate = 0"
+  
+} > "$REPLAY_DIR/regression-test-plan.md"
+
+# Step 5: Create checklist
+echo ""
+echo "✅ Step 5: Creating checklist..."
+
+{
+  echo "# Error Replay Checklist"
+  echo ""
+  echo "## Analysis Phase"
+  echo "- [ ] Read AI analysis (\`analysis.md\`)"
+  echo "- [ ] Review error context (\`context.md\`)"
+  echo "- [ ] Understand stack trace"
+  echo "- [ ] Identify input data that triggered error"
+  echo ""
+  echo "## Reproduction Phase"
+  echo "- [ ] Run reproduction script locally"
+  echo "- [ ] Match production environment (Node version, dependencies, etc.)"
+  echo "- [ ] Reproduce error with 100% consistency"
+  echo "- [ ] Document reproduction steps"
+  echo ""
+  echo "## Fix Phase"
+  echo "- [ ] Identify root cause (not just symptom)"
+  echo "- [ ] Implement fix"
+  echo "- [ ] Verify fix with reproduction script"
+  echo "- [ ] Add edge case tests"
+  echo ""
+  echo "## Testing Phase"
+  echo "- [ ] Convert reproduction script to regression test"
+  echo "- [ ] Add test to \`tests/regression/\` directory"
+  echo "- [ ] Ensure test fails without fix"
+  echo "- [ ] Ensure test passes with fix"
+  echo "- [ ] Add to CI pipeline"
+  echo ""
+  echo "## Deployment Phase"
+  echo "- [ ] All tests pass locally"
+  echo "- [ ] Code review approved"
+  echo "- [ ] Deploy to staging"
+  echo "- [ ] Monitor for 24h (no recurrence)"
+  echo "- [ ] Deploy to production"
+  echo "- [ ] Monitor production metrics"
+  echo ""
+  echo "## Documentation Phase"
+  echo "- [ ] Document root cause in post-mortem"
+  echo "- [ ] Update error handling docs"
+  echo "- [ ] Share learnings with team"
+  
+} > "$REPLAY_DIR/CHECKLIST.md"
+
+echo ""
+echo "✅ Error replay setup complete!"
+echo ""
+echo "📁 Files generated:"
+echo "   - analysis.md - AI explanation of error"
+echo "   - context.md - Extracted error context"
+echo "   - reproduce-error.$([[ $LANG == 'javascript' ]] && echo 'js' || echo 'py') - Reproduction script"
+echo "   - regression-test-plan.md - Test creation guide"
+echo "   - CHECKLIST.md - Step-by-step checklist"
+echo ""
+echo "📋 Next steps:"
+echo "   1. Read CHECKLIST.md"
+echo "   2. Run reproduce-error.$([[ $LANG == 'javascript' ]] && echo 'js' || echo 'py')"
+echo "   3. Follow regression-test-plan.md"
+echo ""
+echo "🎯 Goal: Turn this production error into a regression test"
+```
+
+**Benefits:**
+- Systematic approach to reproducing production errors
+- AI-powered error analysis guides debugging
+- Automated test generation from production errors
+- Ensures every production bug becomes a regression test
+- Prevents same error from happening twice
+
+---
+
+### Workflow 3: Error-Driven Development (EDD) Pipeline
+
+**Scenario:** Integrate error analysis into development workflow to catch errors earlier and learn from them continuously.
+
+**Challenge:** Developers ignore errors until production, missing opportunities to learn and improve code quality.
+
+**Solution:**
+```bash
+#!/bin/bash
+# edd-pipeline.sh - Error-Driven Development CI/CD integration
+
+# Install as Git hooks, CI pipeline, or local dev tool
+
+MODE="${1:-pre-commit}"  # pre-commit, pre-push, ci, watch
+
+ERROR_DB=".edd/error-database.jsonl"
+ERROR_STATS=".edd/stats.json"
+mkdir -p .edd
+
+case $MODE in
+  pre-commit)
+    echo "🔍 EDD: Pre-commit error check..."
+    
+    # Run tests, capture errors
+    npm test 2>&1 | tee /tmp/edd-test-output
+    
+    if [ ${PIPESTATUS[0]} -ne 0 ]; then
+      echo ""
+      echo "⚠️  Tests failed. Analyzing errors..."
+      echo ""
+      
+      # Analyze with oops
+      cat /tmp/edd-test-output | oops > /tmp/edd-analysis
+      
+      # Show analysis
+      cat /tmp/edd-analysis
+      
+      # Log error to database
+      {
+        echo "{\"timestamp\":\"$(date -Iseconds)\",\"phase\":\"pre-commit\",\"type\":\"test-failure\"}"
+      } >> "$ERROR_DB"
+      
+      echo ""
+      read -p "Continue commit despite test failures? (y/N): " -n 1 -r
+      echo
+      if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        exit 1
+      fi
+    fi
+    ;;
+    
+  pre-push)
+    echo "🔍 EDD: Pre-push validation..."
+    
+    # Run full build
+    npm run build 2>&1 | tee /tmp/edd-build-output
+    
+    if [ ${PIPESTATUS[0]} -ne 0 ]; then
+      echo ""
+      echo "🚨 Build failed before push!"
+      echo ""
+      
+      # Analyze build errors
+      cat /tmp/edd-build-output | oops --severity error
+      
+      # Log
+      echo "{\"timestamp\":\"$(date -Iseconds)\",\"phase\":\"pre-push\",\"type\":\"build-failure\"}" >> "$ERROR_DB"
+      
+      echo ""
+      echo "❌ Fix build errors before pushing"
+      exit 1
+    fi
+    
+    # Check for new console.log/debugger statements
+    if git diff origin/main HEAD | grep -E "console\.(log|error|warn|debug)|debugger"; then
+      echo ""
+      echo "⚠️  Found debugging statements in diff:"
+      git diff origin/main HEAD | grep -E "console\.|debugger" --color
+      echo ""
+      read -p "Remove debugging code before push? (Y/n): " -n 1 -r
+      echo
+      if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        echo "Please remove debugging statements and try again"
+        exit 1
+      fi
+    fi
+    ;;
+    
+  ci)
+    echo "🔍 EDD: CI Pipeline error analysis..."
+    
+    # Collect all errors from CI logs
+    {
+      npm run lint 2>&1
+      npm test 2>&1
+      npm run build 2>&1
+      npm run e2e 2>&1
+    } > /tmp/edd-ci-full-log 2>&1
+    
+    # Extract only errors
+    grep -i "error\|fail\|exception" /tmp/edd-ci-full-log > /tmp/edd-errors || true
+    
+    if [ -s /tmp/edd-errors ]; then
+      echo ""
+      echo "📊 CI Error Summary:"
+      echo ""
+      
+      # Analyze errors
+      cat /tmp/edd-errors | oops --severity error > /tmp/edd-ci-analysis
+      
+      # Post to PR as comment (if in PR context)
+      if [ -n "$GITHUB_PR_NUMBER" ]; then
+        {
+          echo "## 🤖 Error-Driven Development Analysis"
+          echo ""
+          echo "<details>"
+          echo "<summary>AI Analysis of CI Errors</summary>"
+          echo ""
+          echo '```'
+          cat /tmp/edd-ci-analysis
+          echo '```'
+          echo ""
+          echo "</details>"
+        } > /tmp/pr-comment.md
+        
+        gh pr comment "$GITHUB_PR_NUMBER" --body-file /tmp/pr-comment.md
+      fi
+      
+      # Update error stats
+      error_count=$(wc -l < /tmp/edd-errors | tr -d ' ')
+      {
+        echo "{"
+        echo "  \"timestamp\": \"$(date -Iseconds)\","
+        echo "  \"ci_run\": \"$GITHUB_RUN_ID\","
+        echo "  \"error_count\": $error_count,"
+        echo "  \"analysis\": \"$(cat /tmp/edd-ci-analysis | head -10 | tr '\n' ' ')\""
+        echo "}"
+      } >> "$ERROR_DB"
+      
+      exit 1
+    fi
+    ;;
+    
+  watch)
+    echo "👀 EDD: Watch mode - learning from errors in real-time..."
+    echo "Press Ctrl+C to stop"
+    echo ""
+    
+    # Watch for file changes, run tests, analyze errors
+    while true; do
+      # Use fswatch, inotify, or fallback to sleep
+      if command -v fswatch >/dev/null; then
+        fswatch -1 src/ tests/
+      else
+        sleep 5
+      fi
+      
+      echo ""
+      echo "🔄 Files changed, running tests..."
+      
+      npm test 2>&1 | tee /tmp/edd-watch-output
+      
+      if [ ${PIPESTATUS[0]} -ne 0 ]; then
+        echo ""
+        echo "💡 Error detected! AI analysis:"
+        echo ""
+        cat /tmp/edd-watch-output | oops --severity error
+        echo ""
+        
+        # Log error pattern for learning
+        error_signature=$(cat /tmp/edd-watch-output | grep -i "error:" | head -1 | md5sum | cut -d' ' -f1)
+        
+        # Check if we've seen this error before
+        if grep -q "$error_signature" "$ERROR_DB" 2>/dev/null; then
+          echo "📚 Note: You've encountered this error before. Check $ERROR_DB for history."
+        else
+          echo "🆕 New error pattern detected and logged"
+          echo "{\"timestamp\":\"$(date -Iseconds)\",\"phase\":\"watch\",\"signature\":\"$error_signature\"}" >> "$ERROR_DB"
+        fi
+      else
+        echo "✅ All tests passed!"
+      fi
+    done
+    ;;
+    
+  stats)
+    echo "📊 Error-Driven Development Statistics"
+    echo ""
+    
+    if [ ! -f "$ERROR_DB" ]; then
+      echo "No error data collected yet"
+      exit 0
+    fi
+    
+    total_errors=$(wc -l < "$ERROR_DB" | tr -d ' ')
+    
+    echo "Total errors logged: $total_errors"
+    echo ""
+    
+    echo "Errors by phase:"
+    echo "  Pre-commit: $(grep -c '"phase":"pre-commit"' "$ERROR_DB" || echo "0")"
+    echo "  Pre-push:   $(grep -c '"phase":"pre-push"' "$ERROR_DB" || echo "0")"
+    echo "  CI:         $(grep -c '"phase":"ci"' "$ERROR_DB" || echo "0")"
+    echo "  Watch:      $(grep -c '"phase":"watch"' "$ERROR_DB" || echo "0")"
+    echo ""
+    
+    echo "Recent errors:"
+    tail -5 "$ERROR_DB" | while read line; do
+      timestamp=$(echo "$line" | grep -o '"timestamp":"[^"]*"' | cut -d'"' -f4)
+      phase=$(echo "$line" | grep -o '"phase":"[^"]*"' | cut -d'"' -f4)
+      echo "  [$timestamp] $phase"
+    done
+    ;;
+    
+  install)
+    echo "📦 Installing EDD pipeline..."
+    
+    # Install git hooks
+    cat > .git/hooks/pre-commit <<'EOF'
+#!/bin/bash
+./.edd/edd-pipeline.sh pre-commit
+EOF
+    chmod +x .git/hooks/pre-commit
+    
+    cat > .git/hooks/pre-push <<'EOF'
+#!/bin/bash
+./.edd/edd-pipeline.sh pre-push
+EOF
+    chmod +x .git/hooks/pre-push
+    
+    # Copy this script to .edd/
+    mkdir -p .edd
+    cp "$0" .edd/edd-pipeline.sh
+    chmod +x .edd/edd-pipeline.sh
+    
+    echo "✅ EDD pipeline installed!"
+    echo ""
+    echo "Git hooks added:"
+    echo "  - Pre-commit: Test validation with AI analysis"
+    echo "  - Pre-push: Build validation and debug code check"
+    echo ""
+    echo "Additional commands:"
+    echo "  ./.edd/edd-pipeline.sh watch  - Watch mode (auto-analyze on file change)"
+    echo "  ./.edd/edd-pipeline.sh stats  - View error statistics"
+    ;;
+    
+  *)
+    echo "Usage: $0 {pre-commit|pre-push|ci|watch|stats|install}"
+    exit 1
+    ;;
+esac
+```
+
+**Installation:**
+```bash
+# Install EDD pipeline in your project
+curl -o edd-pipeline.sh https://example.com/edd-pipeline.sh
+chmod +x edd-pipeline.sh
+./edd-pipeline.sh install
+```
+
+**Daily workflow:**
+```bash
+# 1. Watch mode during development
+./edd/edd-pipeline.sh watch
+# → Automatically analyzes errors as you code
+
+# 2. Git commit triggers pre-commit hook
+git add .
+git commit -m "feat: add new feature"
+# → Runs tests, analyzes failures with oops
+
+# 3. Git push triggers pre-push hook
+git push
+# → Validates build, checks for debug code
+
+# 4. CI pipeline analyzes errors
+# → Posts AI analysis as PR comment
+
+# 5. Check error stats weekly
+./edd/edd-pipeline.sh stats
+# → See patterns, improve code quality
+```
+
+**Benefits:**
+- Shift-left error detection (catch errors before production)
+- Learn from every error with AI guidance
+- Build error knowledge base over time
+- Identify recurring error patterns
+- Improve code quality through continuous feedback
+
+---
+
 ## Performance Tips
 
 ### 1. **Use Shell Aliases for Speed**
