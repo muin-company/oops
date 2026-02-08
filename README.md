@@ -531,6 +531,875 @@ Check:
      $ ssh -v user@server.com
 ```
 
+---
+
+### Example 10: Ruby Gem Installation Failure
+
+**Error:**
+```bash
+$ bundle install
+Gem::Ext::BuildError: ERROR: Failed to build gem native extension.
+    current directory: /usr/local/bundle/gems/nokogiri-1.13.1/ext/nokogiri
+/usr/local/bin/ruby -I /usr/local/lib/ruby/site_ruby/3.1.0 extconf.rb
+checking for gzdopen() in -lz... no
+zlib is missing; necessary for building libxml2
+```
+
+**Solution:**
+```bash
+$ bundle install 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: Missing system dependencies for native gem compilation
+
+Solution: Install development headers for zlib and libxml2
+
+  # Ubuntu/Debian:
+  $ sudo apt-get update
+  $ sudo apt-get install -y zlib1g-dev libxml2-dev libxslt-dev
+
+  # macOS:
+  $ brew install libxml2 libxslt
+  $ bundle config build.nokogiri --use-system-libraries
+
+  # CentOS/RHEL:
+  $ sudo yum install -y zlib-devel libxml2-devel libxslt-devel
+
+Then retry:
+  $ bundle install
+
+Done in 1.3s ✓
+```
+
+---
+
+### Example 11: Rust Cargo Compilation Error
+
+**Error:**
+```bash
+$ cargo build --release
+   Compiling myapp v0.1.0 (/home/user/myapp)
+error[E0277]: the trait bound `MyStruct: Clone` is not satisfied
+  --> src/main.rs:15:22
+   |
+15 |     let copy = data.clone();
+   |                      ^^^^^ the trait `Clone` is not implemented for `MyStruct`
+```
+
+**Solution:**
+```bash
+$ cargo build 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: MyStruct doesn't implement the Clone trait
+
+Solution: Derive Clone or implement it manually
+
+  Option 1: Auto-derive (recommended if all fields are Clone)
+  #[derive(Clone)]
+  struct MyStruct {
+      field1: String,
+      field2: i32,
+  }
+
+  Option 2: Manual implementation
+  impl Clone for MyStruct {
+      fn clone(&self) -> Self {
+          MyStruct {
+              field1: self.field1.clone(),
+              field2: self.field2,
+          }
+      }
+  }
+
+  Option 3: If you don't need ownership, use a reference
+  let copy = &data;  // Borrow instead of clone
+
+Done in 0.9s ✓
+```
+
+---
+
+### Example 12: AWS CLI Permission Denied
+
+**Error:**
+```bash
+$ aws s3 cp file.txt s3://my-bucket/
+upload failed: ./file.txt to s3://my-bucket/file.txt
+An error occurred (AccessDenied) when calling the PutObject operation: Access Denied
+```
+
+**Solution:**
+```bash
+$ aws s3 cp file.txt s3://my-bucket/ 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: IAM permissions insufficient for S3 PutObject operation
+
+Solution: Check and update IAM policy
+
+  1. Verify current credentials:
+     $ aws sts get-caller-identity
+
+  2. Check bucket policy and IAM permissions:
+     Required permission: s3:PutObject
+     Required in policy:
+     {
+       "Effect": "Allow",
+       "Action": ["s3:PutObject"],
+       "Resource": "arn:aws:s3:::my-bucket/*"
+     }
+
+  3. Common causes:
+     - Wrong AWS profile: $ aws configure list
+     - Bucket policy blocks your IP/user
+     - MFA required but not provided
+     - Using wrong region: $ aws configure set region us-east-1
+
+  4. Test with read-only operation first:
+     $ aws s3 ls s3://my-bucket/
+
+Done in 1.4s ✓
+```
+
+---
+
+### Example 13: Java OutOfMemoryError
+
+**Error:**
+```bash
+$ java -jar application.jar
+Exception in thread "main" java.lang.OutOfMemoryError: Java heap space
+        at java.util.Arrays.copyOf(Arrays.java:3332)
+        at java.util.ArrayList.grow(ArrayList.java:257)
+        at java.util.ArrayList.ensureExplicitCapacity(ArrayList.java:231)
+```
+
+**Solution:**
+```bash
+$ java -jar application.jar 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: Java heap space exhausted - application ran out of memory
+
+Solution: Increase heap size or fix memory leak
+
+  Immediate fix - increase heap size:
+    $ java -Xms512m -Xmx2048m -jar application.jar
+    
+    -Xms512m   = Initial heap size (512 MB)
+    -Xmx2048m  = Maximum heap size (2 GB)
+
+  Debug memory usage:
+    # Enable GC logging
+    $ java -Xlog:gc* -jar application.jar
+
+    # Create heap dump on OOM
+    $ java -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp -jar application.jar
+
+  Check for memory leaks:
+    - Use VisualVM or JProfiler
+    - Look for unbounded collections
+    - Check for static references holding objects
+    - Verify database connections are closed
+
+  For production:
+    # Docker container
+    docker run -m 2g --memory-swap 2g myapp
+
+    # Kubernetes
+    resources:
+      limits:
+        memory: "2Gi"
+
+Done in 1.2s ✓
+```
+
+---
+
+### Example 14: Gradle Build Failure (Dependency Conflict)
+
+**Error:**
+```bash
+$ ./gradlew build
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Could not resolve all dependencies for configuration ':compileClasspath'.
+> Could not resolve com.google.guava:guava.
+  Required by:
+      project : > com.google.api:api-common:2.0.0
+      project : > com.google.cloud:google-cloud-storage:2.1.0
+   > Cannot find a version of 'com.google.guava:guava' that satisfies the version constraints:
+      Dependency path 'project :' --> 'com.google.api:api-common:2.0.0' --> 'com.google.guava:guava:31.0.1-jre'
+      Dependency path 'project :' --> 'com.google.cloud:google-cloud-storage:2.1.0' --> 'com.google.guava:guava:30.1-jre'
+```
+
+**Solution:**
+```bash
+$ ./gradlew build 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: Dependency version conflict - two libraries require different Guava versions
+
+Solution: Force a compatible version or update dependencies
+
+  Option 1: Force a specific version (in build.gradle)
+  configurations.all {
+      resolutionStrategy {
+          force 'com.google.guava:guava:31.1-jre'
+      }
+  }
+
+  Option 2: Use dependency constraints
+  dependencies {
+      constraints {
+          implementation('com.google.guava:guava:31.1-jre') {
+              because 'Resolve version conflict between api-common and google-cloud-storage'
+          }
+      }
+  }
+
+  Option 3: Update conflicting dependencies
+  dependencies {
+      implementation 'com.google.cloud:google-cloud-storage:2.2.0'  // Newer version
+      implementation 'com.google.api:api-common:2.1.0'              // Newer version
+  }
+
+  Debug dependency tree:
+    $ ./gradlew dependencies --configuration compileClasspath
+
+Done in 1.1s ✓
+```
+
+---
+
+### Example 15: Elixir/Phoenix Compilation Error
+
+**Error:**
+```bash
+$ mix phx.server
+Compiling 12 files (.ex)
+
+== Compilation error in file lib/my_app/accounts/user.ex ==
+** (CompileError) lib/my_app/accounts/user.ex:45: undefined function validate_required/2
+    (elixir 1.14.2) lib/kernel/parallel_compiler.ex:340: anonymous fn/5 in Kernel.ParallelCompiler.spawn_workers/7
+```
+
+**Solution:**
+```bash
+$ mix phx.server 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: Missing import for Ecto.Changeset functions
+
+Solution: Import Ecto.Changeset at the top of your module
+
+  Add to lib/my_app/accounts/user.ex:
+  
+  defmodule MyApp.Accounts.User do
+    use Ecto.Schema
+    import Ecto.Changeset  # ← Add this line
+    
+    schema "users" do
+      field :email, :string
+      field :name, :string
+      timestamps()
+    end
+    
+    def changeset(user, attrs) do
+      user
+      |> cast(attrs, [:email, :name])
+      |> validate_required([:email, :name])  # Now this works
+    end
+  end
+
+  Common Ecto.Changeset functions that need the import:
+    - cast/3
+    - validate_required/2
+    - validate_length/3
+    - validate_format/3
+    - unique_constraint/2
+
+Done in 0.7s ✓
+```
+
+---
+
+### Example 16: CI/CD Pipeline Failure - GitHub Actions
+
+**Error:**
+```bash
+$ gh run view 1234567890
+✓ build Build and test    52s
+✗ deploy Deploy to production 5s
+
+deploy Deploy to production
+  Error: Process completed with exit code 1.
+  
+  Run aws ecs update-service --cluster prod --service web --force-new-deployment
+  
+  An error occurred (ClusterNotFoundException) when calling the UpdateService operation:
+  Cluster not found.
+```
+
+**Solution:**
+```bash
+$ gh run view 1234567890 --log-failed 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: AWS ECS cluster not found - likely wrong region or missing AWS credentials in CI
+
+Solution: Configure AWS credentials and region in GitHub Actions
+
+  Add to .github/workflows/deploy.yml:
+  
+  - name: Configure AWS credentials
+    uses: aws-actions/configure-aws-credentials@v2
+    with:
+      role-to-assume: arn:aws:iam::123456789012:role/GitHubActionsRole
+      aws-region: us-east-1  # ← Make sure region matches your cluster
+  
+  - name: Deploy to ECS
+    run: |
+      aws ecs update-service \
+        --cluster prod \
+        --service web \
+        --force-new-deployment \
+        --region us-east-1  # Explicit region
+
+  Checklist:
+    ✓ Secrets.AWS_ACCESS_KEY_ID set in repository settings
+    ✓ Secrets.AWS_SECRET_ACCESS_KEY set in repository settings
+    ✓ IAM user/role has ecs:UpdateService permission
+    ✓ Region matches where cluster was created
+    ✓ Cluster name matches exactly (case-sensitive)
+
+  Debug:
+    $ aws ecs list-clusters --region us-east-1
+    $ aws ecs describe-clusters --clusters prod --region us-east-1
+
+Done in 1.5s ✓
+```
+
+---
+
+### Example 17: Terraform Apply Failure
+
+**Error:**
+```bash
+$ terraform apply
+...
+Error: Error creating ALB Target Group: ValidationError: A target group with the same name 'api-tg' already exists
+        status code: 400, request id: abc-123-def
+  
+  on alb.tf line 23, in resource "aws_lb_target_group" "api":
+  23: resource "aws_lb_target_group" "api" {
+```
+
+**Solution:**
+```bash
+$ terraform apply 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: AWS resource already exists outside Terraform state
+
+Solution: Import existing resource or use different name
+
+  Option 1: Import existing resource into Terraform state
+    # Find the ARN of the existing target group
+    $ aws elbv2 describe-target-groups --names api-tg \
+      --query 'TargetGroups[0].TargetGroupArn' --output text
+    
+    # Import it
+    $ terraform import aws_lb_target_group.api \
+      arn:aws:elasticloadbalancing:us-east-1:123456789:targetgroup/api-tg/abc123
+
+    # Then apply
+    $ terraform apply
+
+  Option 2: Use different name or dynamic naming
+    resource "aws_lb_target_group" "api" {
+      name = "api-tg-${var.environment}"  # api-tg-prod, api-tg-staging
+      ...
+    }
+
+  Option 3: Delete manually and recreate (CAREFUL!)
+    $ aws elbv2 delete-target-group --target-group-arn <arn>
+    $ terraform apply
+
+  Check Terraform state:
+    $ terraform state list
+    $ terraform state show aws_lb_target_group.api
+
+Done in 1.3s ✓
+```
+
+---
+
+### Example 18: Redis Connection Error in Rails
+
+**Error:**
+```bash
+$ rails server
+=> Booting Puma
+=> Rails 7.0.4 application starting in development
+=> Run `bin/rails server --help` for more startup options
+Error connecting to Redis on localhost:6379 (Errno::ECONNREFUSED)
+/usr/local/bundle/gems/redis-4.8.0/lib/redis/connection/ruby.rb:22:in `rescue in connect'
+```
+
+**Solution:**
+```bash
+$ rails server 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: Rails can't connect to Redis - Redis server not running or wrong host/port
+
+Solution: Start Redis and verify connection settings
+
+  1. Check if Redis is running:
+     $ redis-cli ping
+     
+     If "Connection refused":
+     $ redis-server  # Start Redis (foreground)
+     
+     Or as service:
+     $ brew services start redis  # macOS
+     $ sudo systemctl start redis  # Linux
+
+  2. Check Rails Redis configuration:
+     # config/cable.yml or config/redis.yml
+     development:
+       adapter: redis
+       url: redis://localhost:6379/1  # ← Verify this matches your Redis
+
+  3. If using Docker:
+     # docker-compose.yml should have:
+     redis:
+       image: redis:7-alpine
+       ports:
+         - "6379:6379"
+     
+     # Rails should connect to:
+     url: redis://redis:6379/1  # ← Use service name, not localhost
+
+  4. Test Redis connection:
+     $ redis-cli -h localhost -p 6379 ping
+     PONG
+
+  5. Environment-specific settings:
+     # Use environment variables
+     url: <%= ENV.fetch("REDIS_URL") { "redis://localhost:6379/1" } %>
+
+Done in 1.0s ✓
+```
+
+---
+
+### Example 19: MongoDB Connection Timeout
+
+**Error:**
+```bash
+$ npm start
+> node server.js
+
+MongooseServerSelectionError: connect ETIMEDOUT 127.0.0.1:27017
+    at Connection.openUri (/app/node_modules/mongoose/lib/connection.js:825:32)
+    at Mongoose.connect (/app/node_modules/mongoose/lib/index.js:380:15)
+reason: TopologyDescription {
+  type: 'Unknown',
+  servers: Map(1) {
+    '127.0.0.1:27017' => ServerDescription {
+      address: '127.0.0.1:27017',
+      type: 'Unknown',
+      error: MongoNetworkError: connect ETIMEDOUT
+```
+
+**Solution:**
+```bash
+$ npm start 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: Cannot connect to MongoDB - connection timeout
+
+Solution: Check MongoDB is running and connection string is correct
+
+  1. Is MongoDB running?
+     $ mongosh  # Try to connect locally
+     
+     If not running:
+     $ brew services start mongodb-community  # macOS
+     $ sudo systemctl start mongod            # Linux
+     $ docker run -d -p 27017:27017 mongo:6   # Docker
+
+  2. Check connection string:
+     # For local MongoDB:
+     mongodb://localhost:27017/mydb
+     
+     # For MongoDB Atlas (cloud):
+     mongodb+srv://username:password@cluster.mongodb.net/mydb
+     
+     # With authentication:
+     mongodb://username:password@localhost:27017/mydb
+
+  3. Firewall/Network issues:
+     # Test if port is open:
+     $ telnet localhost 27017
+     $ nc -zv localhost 27017
+
+  4. Check MongoDB logs:
+     $ tail -f /usr/local/var/log/mongodb/mongo.log  # macOS
+     $ sudo tail -f /var/log/mongodb/mongod.log      # Linux
+
+  5. Common fixes:
+     - Increase connection timeout in Mongoose:
+       mongoose.connect(uri, {
+         serverSelectionTimeoutMS: 5000  // Default is 30000
+       });
+     
+     - Use correct host in Docker:
+       # Don't use localhost, use container name
+       mongodb://mongo:27017/mydb
+
+Done in 1.4s ✓
+```
+
+---
+
+### Example 20: Webpack Build Out of Memory
+
+**Error:**
+```bash
+$ npm run build
+> webpack --mode production
+
+<--- Last few GCs --->
+
+[18234:0x5638f0a40000]   145623 ms: Mark-sweep 2048.0 (2083.3) -> 2047.7 (2083.3) MB, 1847.6 / 0.0 ms  (average mu = 0.098, current mu = 0.002) allocation failure scavenge might not succeed
+[18234:0x5638f0a40000]   147821 ms: Mark-sweep 2048.7 (2084.3) -> 2048.4 (2084.8) MB, 2197.3 / 0.0 ms  (average mu = 0.046, current mu = 0.001) allocation failure scavenge might not succeed
+
+<--- JS stacktrace --->
+
+FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
+```
+
+**Solution:**
+```bash
+$ npm run build 2>&1 | oops
+
+🔍 Analyzing error...
+
+Problem: Node.js ran out of memory during webpack build
+
+Solution: Increase Node memory limit or optimize webpack config
+
+  Quick fix - increase memory:
+    # In package.json:
+    "scripts": {
+      "build": "node --max-old-space-size=4096 node_modules/.bin/webpack --mode production"
+    }
+    
+    # Or set environment variable:
+    $ export NODE_OPTIONS="--max-old-space-size=4096"
+    $ npm run build
+
+  Long-term fixes - optimize webpack:
+    1. Enable code splitting:
+       optimization: {
+         splitChunks: {
+           chunks: 'all',
+           maxSize: 244000,
+         }
+       }
+
+    2. Disable source maps in production (if not needed):
+       devtool: false  // or 'source-map' instead of 'eval-source-map'
+
+    3. Use thread-loader for parallel processing:
+       npm install --save-dev thread-loader
+
+    4. Enable caching:
+       cache: {
+         type: 'filesystem'
+       }
+
+    5. Check for circular dependencies:
+       npm install --save-dev circular-dependency-plugin
+
+  Debug memory usage:
+    $ node --expose-gc --max-old-space-size=4096 \
+      node_modules/.bin/webpack --mode production --profile
+
+Done in 1.6s ✓
+```
+
+---
+
+## Advanced Features
+
+### Severity Filtering
+
+Use `--severity` to focus on specific error types:
+
+```bash
+# Only show critical errors (crashes, security, permissions)
+$ npm run build 2>&1 | oops --severity critical
+
+# Only analyze warnings (deprecations, timeouts)
+$ npm test 2>&1 | oops --severity warning
+
+# Default: all errors
+$ python script.py 2>&1 | oops
+```
+
+**Severity levels:**
+- 🔴 **critical** - Fatal errors, segfaults, out-of-memory, permission denied, security violations
+- 🟠 **error** - Standard errors, exceptions, failed assertions, compilation errors
+- 🟡 **warning** - Deprecation warnings, lint warnings, timeouts, missing optional dependencies
+- 🔵 **info** - Hints, suggestions, performance tips, informational messages
+
+---
+
+### Batch Error Analysis
+
+Analyze multiple error logs at once:
+
+```bash
+# Analyze all CI job failures
+$ gh run view --log-failed | oops > solutions.txt
+
+# Process saved error logs
+$ cat /var/log/application.log | oops
+
+# Combine multiple sources
+$ cat error1.log error2.log error3.log | oops
+```
+
+---
+
+### Integration with Shell Aliases
+
+**Create smart error handlers:**
+
+```bash
+# Add to ~/.bashrc or ~/.zshrc
+
+# Auto-explain errors for common commands
+alias npm-safe='npm 2>&1 | tee /dev/tty | oops'
+alias py='python 2>&1 | tee /dev/tty | oops'
+alias build='npm run build 2>&1 | tee /dev/tty | oops'
+
+# Test runner with auto-explanation
+alias test='npm test 2>&1 | tee /dev/tty | (grep -q "FAIL" && oops || cat)'
+
+# Git push with error handling
+git-safe() {
+  git push "$@" 2>&1 | tee /dev/tty | (grep -q "error:" && oops || cat)
+}
+```
+
+**Usage:**
+```bash
+$ npm-safe install express  # Errors automatically explained
+$ py app.py                  # Python errors auto-analyzed
+$ git-safe origin main       # Git push errors explained
+```
+
+---
+
+### CI/CD Pipeline Integration
+
+**GitHub Actions:**
+```yaml
+# .github/workflows/ci.yml
+name: CI with Error Explanation
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Run tests with error analysis
+        run: |
+          npm test 2>&1 | tee test-output.log || {
+            echo "## Test Failures" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            npx oops-cli < test-output.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          }
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+**GitLab CI:**
+```yaml
+# .gitlab-ci.yml
+test:
+  script:
+    - npm test 2>&1 | tee test.log || true
+  after_script:
+    - |
+      if grep -q "FAILED" test.log; then
+        echo "Analyzing test failures..."
+        cat test.log | npx oops-cli
+      fi
+  artifacts:
+    when: on_failure
+    paths:
+      - test.log
+```
+
+---
+
+### Error Pattern Recognition
+
+`oops` learns from common patterns and provides context-aware solutions:
+
+**Detected patterns:**
+
+- **Missing dependency** → Suggests installation command for specific package manager
+- **Port in use** → Shows how to kill process + find what's using it
+- **Permission denied** → Checks file permissions, ownership, sudo requirements
+- **Connection refused** → Verifies service status, firewall, network config
+- **Out of memory** → Analyzes heap size, suggests optimizations
+- **Environment variable missing** → Shows where to set it for your platform
+- **Certificate/SSL errors** → Guides through cert validation, renewal
+- **Version mismatch** → Suggests upgrading/downgrading specific packages
+
+---
+
+### Performance Tuning
+
+**Optimize API usage:**
+
+```bash
+# Cache common errors locally (coming soon)
+$ oops --cache enable
+
+# Use faster model for simple errors
+$ oops --model claude-haiku < error.log
+
+# Batch processing for multiple errors
+$ find logs/ -name "*.log" -exec cat {} \; | oops --batch
+```
+
+---
+
+### Keyboard Shortcuts & Workflow
+
+**Quick error re-run pattern:**
+
+```bash
+# Save last command that failed
+alias failed='fc -ln -1 2>&1 | oops'
+
+# Usage:
+$ npm run build  # Fails
+$ failed         # Automatically analyzes the error
+
+# Or use !! (repeat last command) with pipe:
+$ npm run build  # Fails
+$ !! 2>&1 | oops # Explains it
+```
+
+**Multi-stage debugging:**
+
+```bash
+# 1. Run and capture
+$ npm test 2>&1 | tee test-error.log
+
+# 2. Analyze
+$ cat test-error.log | oops
+
+# 3. Try fix
+$ npm install missing-package
+
+# 4. Re-run
+$ npm test
+```
+
+---
+
+## Troubleshooting oops Itself
+
+### "ANTHROPIC_API_KEY not set"
+
+```bash
+$ oops
+Error: ANTHROPIC_API_KEY environment variable not set
+
+# Solution:
+$ export ANTHROPIC_API_KEY="sk-ant-..."
+
+# Make permanent:
+$ echo 'export ANTHROPIC_API_KEY="sk-ant-..."' >> ~/.bashrc
+$ source ~/.bashrc
+```
+
+---
+
+### "No error detected in input"
+
+```bash
+$ echo "Everything is fine" | oops
+No error detected in input
+
+# oops needs actual error messages to analyze
+# Make sure you're piping stderr (2>&1):
+
+# ❌ Wrong:
+$ npm test | oops
+
+# ✅ Correct:
+$ npm test 2>&1 | oops
+```
+
+---
+
+### "API rate limit exceeded"
+
+```bash
+$ npm build 2>&1 | oops
+Error: Rate limit exceeded. Try again in 60 seconds.
+
+# Solution: Wait or upgrade Anthropic API tier
+# For testing, use --verbose to see request details:
+$ npm build 2>&1 | oops --verbose
+```
+
+---
+
+### Verbose mode shows too much
+
+```bash
+# Default (concise):
+$ npm test 2>&1 | oops
+
+# Verbose (detailed):
+$ npm test 2>&1 | oops --verbose
+
+# Minimal (just the solution):
+$ npm test 2>&1 | oops | grep "Solution:" -A 20
+```
+
+---
+
 ### Git push rejected (force push? never!)
 ```bash
 $ git push origin main 2>&1 | oops
