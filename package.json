@@ -1,6 +1,6 @@
 {
-  "name": "oops-cli",
-  "version": "1.0.0",
+  "name": "@mj-muin/oops-cli",
+  "version": "1.0.1",
   "description": "Pipe error messages to AI for instant solutions",
   "main": "index.js",
   "bin": {
@@ -20,14 +20,15 @@
     "troubleshooting",
     "stacktrace"
   ],
+  "homepage": "https://github.com/muin-company/oops#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/oops-cli.git"
+    "url": "https://github.com/muin-company/oops.git"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/oops-cli/issues"
+    "url": "https://github.com/muin-company/oops/issues"
   },
-  "author": "",
+  "author": "muin",
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
