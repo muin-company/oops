@@ -18,7 +18,17 @@
     "anthropic",
     "claude",
     "troubleshooting",
-    "stacktrace"
+    "stacktrace",
+    "fix",
+    "terminal",
+    "pipe",
+    "stderr",
+    "crash",
+    "diagnostic",
+    "devtools",
+    "llm",
+    "auto-fix",
+    "error-handler"
   ],
   "homepage": "https://github.com/muin-company/oops#readme",
   "repository": {
