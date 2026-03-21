@@ -1,12 +1,25 @@
-# oops
+<div align="center">
+
+# 💥 oops
 
 **Your terminal just crashed. oops knows why.**
 
-[![npm version](https://badge.fury.io/js/@mj-muin%2Foops-cli.svg)](https://www.npmjs.com/package/@mj-muin/oops-cli)
+[![npm version](https://img.shields.io/npm/v/@mj-muin/oops-cli?color=red&label=npm)](https://www.npmjs.com/package/@mj-muin/oops-cli)
 [![npm downloads](https://img.shields.io/npm/dm/@mj-muin/oops-cli.svg)](https://www.npmjs.com/package/@mj-muin/oops-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/node/v/@mj-muin/oops-cli.svg)](https://nodejs.org)
-[![GitHub stars](https://img.shields.io/github/stars/muin-company/oops.svg?style=social)](https://github.com/muin-company/oops)
+
+<br/>
+
+```bash
+npm run build 2>&1 | oops
+```
+
+*Pipe any error → AI analysis → copy-paste fix. Under 2 seconds.*
+
+</div>
+
+---
 
 ## The Problem
 
@@ -14,140 +27,93 @@ Your build breaks. You stare at a 40-line stack trace. You copy the error, open 
 
 Meanwhile, your flow state is gone.
 
-## The Solution
-
-Pipe any error to `oops`. Get the fix in under 2 seconds.
-
-```bash
-$ npm run build 2>&1 | oops
-
-[javascript]
-
-Problem: Cannot find module 'express'
-
-Solution: Install the missing dependency
-
-  $ npm install express
-
-Done. 0.8s
-```
-
-No browser. No context switching. No Stack Overflow rabbit holes.
-
-## Installation
-
-```bash
-npm install -g @mj-muin/oops-cli
-```
-
-Or run without installing:
-
-```bash
-npx @mj-muin/oops-cli
-```
-
-## Setup
-
-```bash
-export ANTHROPIC_API_KEY="your-key-here"
-```
-
-Add to `~/.bashrc` or `~/.zshrc` to make it permanent.
-
-Get a key at [console.anthropic.com](https://console.anthropic.com/settings/keys).
-
 ## Quick Start
 
 ```bash
-# Pipe any failing command
+npx @mj-muin/oops-cli                     # Use without installing
+# or
+npm install -g @mj-muin/oops-cli           # Install globally
+
+export ANTHROPIC_API_KEY="sk-ant-..."      # Get one at console.anthropic.com
+```
+
+Then pipe any error:
+
+```bash
 npm run build 2>&1 | oops
 python script.py 2>&1 | oops
 cargo build 2>&1 | oops
-go build 2>&1 | oops
 docker build . 2>&1 | oops
-
-# Verbose mode for detailed analysis
-npm test 2>&1 | oops --verbose
+kubectl logs pod/api-xyz 2>&1 | oops
 ```
 
 The `2>&1` redirects stderr to stdout so `oops` catches all error output.
 
-## Examples
+## Before → After
 
-### Node.js — Missing dependency
+<table>
+<tr>
+<td width="50%">
 
-```bash
-$ npm run start 2>&1 | oops
+**Before** 😩
+```
+$ npm run build
+Error: Cannot find module 'express'
+    at Function.Module._resolveFilename
+    ...45 more lines...
 
-[javascript]
+*copy → Google → SO → try → fail → repeat*
+```
+
+</td>
+<td width="50%">
+
+**After** ⚡
+```
+$ npm run build 2>&1 | oops
 
 Problem: Cannot find module 'express'
 
-Solution: Install the missing dependency
-
+Solution:
   $ npm install express
+
+Done. 0.8s ✓
 ```
 
-### Python — Virtual environment confusion
+</td>
+</tr>
+</table>
 
-```bash
-$ python app.py 2>&1 | oops
+## Examples
 
-[python]
-
-Problem: ModuleNotFoundError: No module named 'flask'
-
-Solution: Install Flask using pip
-
-  $ pip install flask
-
-If using a virtual environment:
-  $ source venv/bin/activate
-  $ pip install flask
-```
-
-### Rust — Borrow checker
-
+### Rust Borrow Checker
 ```bash
 $ cargo build 2>&1 | oops
-
-[rust]
 
 Problem: Cannot borrow `users` as mutable while borrowed as immutable
 
 Solution: Limit the lifetime of the immutable borrow
 
   let first_name = users[0].name.clone();
-  users.push(new_user);
+  users.push(new_user);     // Now OK
   println!("{}", first_name);
 ```
 
-### Docker — Cryptic build error
-
+### Docker Build Failure
 ```bash
 $ docker build -t myapp . 2>&1 | oops
 
-[docker]
-
 Problem: Dockerfile parse error - unexpected EOF at line 12
 
-Solution: Check for missing backslash in multi-line RUN command
+Solution: Missing backslash in multi-line RUN command
 
-  # Before (broken)
-  RUN apt-get update
-      apt-get install -y curl
-
-  # After (fixed)
   RUN apt-get update && \
       apt-get install -y curl
 ```
 
-### Git — Push rejected
-
+### Git Push Rejected
 ```bash
 $ git push origin main 2>&1 | oops
-
-[git]
 
 Problem: Remote contains commits you don't have locally
 
@@ -156,57 +122,91 @@ Solution:
   $ git push origin main
 ```
 
+### Kubernetes Pod Crash
+```bash
+$ kubectl logs pod/api-7d9f8b-xk2m 2>&1 | oops
+
+Problem: ECONNREFUSED 10.0.0.5:5432 — Can't reach PostgreSQL
+
+Solution:
+  1. Check DB service: kubectl get svc postgres-service
+  2. Verify DB_HOST env var in deployment
+  3. Test: kubectl run debug --image=postgres:15 ...
+```
+
+## Use Cases
+
+- **Stay in flow** — Get solutions without leaving the terminal
+- **Onboard faster** — Clone a new repo, pipe errors instead of asking teammates
+- **Debug production** — `kubectl logs ... | oops` when every second counts
+- **Learn new languages** — Rust borrow checker, Go interfaces explained instantly
+- **Pre-commit check** — `npm test 2>&1 | oops` before pushing broken code
+
 ## How It Works
 
 1. Reads error output from stdin
-2. Auto-detects language/framework (JS, Python, Rust, Go, Docker, Git, etc.)
+2. Auto-detects language/framework
 3. Sends to Claude AI for analysis
-4. Returns concise, actionable fix
-
-Typical response time: 0.5–1.5 seconds.
+4. Returns concise, actionable fix (~0.5–1.5s)
 
 ## Supported Languages
 
-JavaScript/TypeScript, Python, Go, Rust, Java, Ruby, PHP, Docker, Git, and shell errors. The AI model has broad knowledge, so even obscure tools often get good results.
+JavaScript · TypeScript · Python · Go · Rust · Java · C/C++ · Ruby · PHP · Docker · Kubernetes · Git · Shell · PostgreSQL · MySQL · and more
 
 ## Options
 
 ```
--v, --verbose    Show detailed analysis and timing
+-v, --verbose    Detailed analysis with multiple approaches
 --no-color       Disable colored output
 -V, --version    Show version
 -h, --help       Show help
 ```
 
-## Tips
+## Pro Tips
 
 ```bash
 # Shell aliases for speed
-alias oops-npm='npm run build 2>&1 | oops'
+alias oops-build='npm run build 2>&1 | oops'
 alias oops-test='npm test 2>&1 | oops'
 
-# Trim huge output for faster results
-npm run build 2>&1 | tail -100 | oops
+# Trim huge output for faster analysis
+docker build . 2>&1 | tail -100 | oops
 
-# Save solutions
+# Save solutions for later
 npm run build 2>&1 | oops > solution.txt
 
 # Git pre-commit hook
-npm run build 2>&1 | oops || exit 1
+npm test 2>&1 | oops || exit 1
 ```
+
+## vs Alternatives
+
+| | `oops` | Google/SO | ChatGPT | Copilot |
+|---|---|---|---|---|
+| Speed | ~1 second | 2-5 minutes | 30+ seconds | N/A |
+| Context-aware | ✅ Full error | ❌ You summarize | ❌ You paste | IDE only |
+| Terminal-native | ✅ Pipe & done | ❌ Browser | ❌ Browser | IDE only |
+| Cost per query | ~$0.003 | Free | $20/mo | $10/mo |
 
 ## Privacy
 
 Error text is sent to [Anthropic's API](https://www.anthropic.com/legal/privacy) for analysis. Don't pipe sensitive data (passwords, API keys, tokens).
 
-## Cost
+## Requirements
 
-Uses the Anthropic Claude API. Each analysis costs roughly $0.003–0.015 (less than 2 cents). Free tier gives $5 credit (~500+ analyses).
+- Node.js 18+
+- [Anthropic API key](https://console.anthropic.com) (`ANTHROPIC_API_KEY`)
 
 ## License
 
-MIT © [muin](https://github.com/muin-company)
+MIT © [MUIN](https://muin.company)
 
 ---
 
-*Stop Googling errors. Pipe them to AI.*
+<div align="center">
+
+**Built by [MUIN](https://muin.company)** — *일하는 AI, 누리는 인간*
+
+💥 Stop Googling errors. Pipe them to AI instead.
+
+</div>
