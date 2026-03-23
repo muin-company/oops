@@ -197,6 +197,14 @@ Error text is sent to [Anthropic's API](https://www.anthropic.com/legal/privacy)
 - Node.js 18+
 - [Anthropic API key](https://console.anthropic.com) (`ANTHROPIC_API_KEY`)
 
+## Also From MUIN
+
+Love `oops`? Check out our other developer CLI tools:
+
+- **[roast-cli](https://www.npmjs.com/package/roast-cli)** — AI code reviews with Gordon Ramsay energy. Get brutally honest feedback before errors even happen.
+- **[git-why](https://www.npmjs.com/package/git-why)** — AI-powered git history explainer. Understand *why* that buggy code exists before you fix it.
+- **[portguard](https://www.npmjs.com/package/portguard)** — Monitor and kill zombie processes hogging your ports. Fix the `EADDRINUSE` before you even need `oops`.
+
 ## License
 
 MIT © [MUIN](https://muin.company)

@@ -28,7 +28,13 @@
     "devtools",
     "llm",
     "auto-fix",
-    "error-handler"
+    "error-handler",
+    "developer-experience",
+    "dx",
+    "productivity",
+    "error-message",
+    "stack-trace",
+    "ai-debugging"
   ],
   "homepage": "https://github.com/muin-company/oops#readme",
   "repository": {
