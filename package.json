@@ -1,10 +1,10 @@
 {
   "name": "@mj-muin/oops-cli",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "description": "Pipe error messages to AI for instant solutions",
   "main": "index.js",
   "bin": {
-    "oops": "./bin/oops.js"
+    "oops": "bin/oops.js"
   },
   "scripts": {
     "test": "node test.js"
@@ -39,7 +39,7 @@
   "homepage": "https://github.com/muin-company/oops#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/muin-company/oops.git"
+    "url": "git+https://github.com/muin-company/oops.git"
   },
   "bugs": {
     "url": "https://github.com/muin-company/oops/issues"

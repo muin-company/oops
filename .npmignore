@@ -1,0 +1,16 @@
+node_modules/
+*.log
+.env
+.DS_Store
+*.swp
+*.swo
+*~
+.git/
+test.js
+COMPLETION-REPORT.md
+CONTRIBUTING.md
+DEMO.md
+PROJECT-SUMMARY.md
+QUICKSTART.md
+VISUAL-DEMO.md
+examples/
