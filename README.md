@@ -205,6 +205,10 @@ Love `oops`? Check out our other developer CLI tools:
 - **[git-why](https://www.npmjs.com/package/git-why)** — AI-powered git history explainer. Understand *why* that buggy code exists before you fix it.
 - **[portguard](https://www.npmjs.com/package/portguard)** — Monitor and kill zombie processes hogging your ports. Fix the `EADDRINUSE` before you even need `oops`.
 
+## Featured On
+
+Read the launch article on Dev.to: **[4 CLI Tools Every Developer Needs (That You've Never Heard Of)](https://dev.to/mjmuin/4-cli-tools-every-developer-needs-that-youve-never-heard-of-318b)**
+
 ## License
 
 MIT © [MUIN](https://muin.company)
