@@ -17,6 +17,8 @@
 
 *Pipe any error → AI analysis → copy-paste fix. Under 2 seconds.*
 
+<img src="demo.gif" alt="oops demo" width="600"/>
+
 </div>
 
 ---
