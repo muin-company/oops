@@ -11,9 +11,9 @@
 
 <br/>
 
-```bash
-npm run build 2>&1 | oops
-```
+<img src="./demo.gif" alt="oops demo" width="700"/>
+
+<br/>
 
 *Pipe any error → AI analysis → copy-paste fix. Under 2 seconds.*
 
