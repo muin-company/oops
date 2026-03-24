@@ -1,6 +1,6 @@
 {
-  "name": "@mj-muin/oops-cli",
-  "version": "1.0.3",
+  "name": "oops-ai",
+  "version": "1.0.0",
   "description": "Pipe error messages to AI for instant solutions",
   "main": "index.js",
   "bin": {
@@ -34,7 +34,25 @@
     "productivity",
     "error-message",
     "stack-trace",
-    "ai-debugging"
+    "ai-debugging",
+    "openai",
+    "gpt",
+    "chatgpt",
+    "copilot",
+    "error-resolution",
+    "ai-tools",
+    "automation",
+    "node",
+    "nodejs",
+    "python",
+    "rust",
+    "typescript",
+    "javascript",
+    "error-fix",
+    "explain-error",
+    "debug",
+    "debugger",
+    "oops"
   ],
   "homepage": "https://github.com/muin-company/oops#readme",
   "repository": {

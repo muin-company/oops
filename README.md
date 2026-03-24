@@ -4,10 +4,10 @@
 
 **Your terminal just crashed. oops knows why.**
 
-[![npm version](https://img.shields.io/npm/v/@mj-muin/oops-cli?color=red&label=npm)](https://www.npmjs.com/package/@mj-muin/oops-cli)
-[![npm downloads](https://img.shields.io/npm/dm/@mj-muin/oops-cli.svg)](https://www.npmjs.com/package/@mj-muin/oops-cli)
+[![npm version](https://img.shields.io/npm/v/oops-ai?color=red&label=npm)](https://www.npmjs.com/package/oops-ai)
+[![npm downloads](https://img.shields.io/npm/dm/oops-ai.svg)](https://www.npmjs.com/package/oops-ai)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/node/v/@mj-muin/oops-cli.svg)](https://nodejs.org)
+[![Node.js Version](https://img.shields.io/node/v/oops-ai.svg)](https://nodejs.org)
 
 <br/>
 
@@ -30,9 +30,9 @@ Meanwhile, your flow state is gone.
 ## Quick Start
 
 ```bash
-npx @mj-muin/oops-cli                     # Use without installing
+npx oops-ai                                # Use without installing
 # or
-npm install -g @mj-muin/oops-cli           # Install globally
+npm install -g oops-ai                     # Install globally
 
 export ANTHROPIC_API_KEY="sk-ant-..."      # Get one at console.anthropic.com
 ```
