@@ -5,7 +5,8 @@
 **Your terminal just crashed. oops knows why.**
 
 [![npm version](https://img.shields.io/npm/v/oops-ai?color=red&label=npm)](https://www.npmjs.com/package/oops-ai)
-[![npm downloads](https://img.shields.io/npm/dm/oops-ai.svg)](https://www.npmjs.com/package/oops-ai)
+[![npm downloads/week](https://img.shields.io/npm/dw/oops-ai.svg)](https://www.npmjs.com/package/oops-ai)
+[![npm downloads/month](https://img.shields.io/npm/dm/oops-ai.svg)](https://www.npmjs.com/package/oops-ai)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/node/v/oops-ai.svg)](https://nodejs.org)
 
