@@ -1,7 +1,7 @@
 {
   "name": "oops-ai",
   "version": "1.0.0",
-  "description": "Pipe error messages to AI for instant solutions",
+  "description": "AI-powered error explainer and debug assistant. Pipe error messages to AI for instant solutions. Stack-trace-ai analyzer with ai-error-fix capabilities.",
   "main": "index.js",
   "bin": {
     "oops": "bin/oops.js"
@@ -10,6 +10,10 @@
     "test": "node test.js"
   },
   "keywords": [
+    "error-explainer-ai",
+    "stack-trace-ai",
+    "ai-error-fix",
+    "debug-assistant",
     "error",
     "debugging",
     "ai",

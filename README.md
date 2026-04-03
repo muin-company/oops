@@ -4,6 +4,8 @@
 
 **Turn cryptic error messages into actionable fixes**
 
+> The AI-powered error explainer and debug assistant that turns stack traces into instant solutions. Pipe any error to this stack-trace-ai analyzer for AI-powered error fixes in under 2 seconds.
+
 [![npm version](https://img.shields.io/npm/v/oops-ai?color=red&label=npm)](https://www.npmjs.com/package/oops-ai)
 [![npm downloads/week](https://img.shields.io/npm/dw/oops-ai.svg)](https://www.npmjs.com/package/oops-ai)
 [![npm downloads/month](https://img.shields.io/npm/dm/oops-ai.svg)](https://www.npmjs.com/package/oops-ai)
